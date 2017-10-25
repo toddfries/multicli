@@ -1,0 +1,203 @@
+#!/usr/bin/perl
+
+# Copyright (c) 2017 Todd T. Fries <todd@fries.net>
+#
+# Permission to use, copy, modify, and distribute this software for any
+# purpose with or without fee is hereby granted, provided that the above
+# copyright notice and this permission notice appear in all copies.
+#
+# THE SOFTWARE IS PROVIDED "AS IS" AND THE AUTHOR DISCLAIMS ALL WARRANTIES
+# WITH REGARD TO THIS SOFTWARE INCLUDING ALL IMPLIED WARRANTIES OF
+# MERCHANTABILITY AND FITNESS. IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR
+# ANY SPECIAL, DIRECT, INDIRECT, OR CONSEQUENTIAL DAMAGES OR ANY DAMAGES
+# WHATSOEVER RESULTING FROM LOSS OF USE, DATA OR PROFITS, WHETHER IN AN
+# ACTION OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF
+# OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
+
+use strict;
+use warnings;
+
+STDERR->autoflush(1);
+STDOUT->autoflush(1);
+
+#
+# BEGIN Hetzner
+#
+use WWW::Hetzner;
+
+my $hconf = $ENV{'HOME'}."/.hcli.conf";
+if (! -f $hconf) {
+        die("config file '$hconf' does not exist");
+}
+if (!open(C,$hconf)) {
+        die("could not open $hconf");
+}
+my $hconfig;
+my $line;
+while(<C>) {
+        if (/^\s*$/ || /^\s*#/) {
+                next;
+        }
+        chomp($line=$_);
+        if ($line =~ /^\s*(\S+)\s*=\s*(.*)\s*$/) {
+                my ($var,$val) = ($1, $2);
+                #printf "loadconf found '%s' = '%s'\n", $var, $val;
+
+                $hconfig->{$var}=$val;
+                next;
+        }
+        printf "Unhandled config line: %s\n", $line;
+}
+close(C);
+
+my $hetzner = WWW::Hetzner->new(
+        huser => $hconfig->{huser},
+        hpass => $hconfig->{hpass},
+);
+
+#
+# END Hetzner
+#
+
+#
+# BEGIN Namecheap
+#
+
+use WWW::Namecheap::API;
+
+my $nconf=$ENV{'HOME'}."/.namecheap.conf";
+if (! -f $nconf) {
+        die "need a conf file, $nconf not found";
+}
+my %nconfig;
+open(CONF,$nconf);
+while(<CONF>) {
+        if (/^\s*#/) {
+                next;
+        }
+        my $line;
+        chomp($line=$_);
+        if ($line =~ /^([^=]+)\s*=\s*(.*$)/) {
+                my ($var,$val)=($1,$2);
+                if (!defined($var) || !defined($val)) {
+                        next;
+                }
+                if (0) {
+                        printf STDERR "nconfig: '%s'='%s'\n", $var,$val;
+                }
+                $nconfig{$var}=$val;
+        }
+}
+close(CONF);
+
+my $napiuser=$nconfig{'apiuser'};
+my $napikey=$nconfig{'apikey'};
+
+if (!defined($napiuser) || !defined($napikey)) {
+        die "napiuser and napikey must be defined in the config file: $nconf";
+}
+my $namecheap = WWW::Namecheap::API->new(
+        #System => 'test',
+        System => 'prod',
+        ApiUser => $napiuser,
+        ApiKey => $napikey,
+        DefaultIp => $nconfig{'defaultip'},
+        #DefaultUser
+        #ApiUrl
+        #Agent
+);
+
+#
+# END Namecheap
+#
+
+#
+# BEGIN Voip.ms
+#
+use VOIP::MS;
+
+my $vconf = $ENV{'HOME'}."/.voipms.conf";
+my $vconfig = { };
+if (-f $vconf) {
+        if (!open(CF,"$vconf")) {
+                print "open of $vconf failed, aborting\n";
+                exit(1);
+        }
+        my $line;
+        while(<CF>) {
+                chomp($line = $_);
+                if ($line =~ /^([a-zA-Z][a-zA-Z_0-9]*)\s*=\s*(.*)$/) {
+                        my ($var, $val) = ($1,$2);
+                        $vconfig->{$var} = $val;
+                        #printf "vconfig: '%s' = '%s'\n",$var,$val;
+                }
+        }
+} else {
+        die("vconfig file $vconf does not exist, need user and pass from it, bailing");
+}
+if (!defined($vconfig->{user}) || !defined($vconfig->{pass})) {
+        print "User or Pass is Null and void, bailing for now\n";
+        exit(1);
+}
+my $voip = VOIP::MS->new(username => $vconfig->{user},
+        password => $vconfig->{pass});
+
+#
+# END Voip.ms
+#
+
+if (0) {
+status("Hetzner server");
+
+my @hservers = $hetzner->servers;
+printf "%7s %12s %10s\n", "Number","Name","Cancel Date";
+foreach my $s (@hservers) {
+	printf "%7d %12s %10s\n",
+		$s->get('server_number'),
+		$s->get('server_name'),
+		$s->get('paid_until');
+}
+
+status("Namecheap domain");
+
+my $dns = $namecheap->dns();
+my $domlist = $dns->getdomains();
+
+foreach my $dd (@{$domlist->{Domain}}) {
+	my %d = %{$dd};
+	my $dom = $d{'Name'};
+	printf STDERR "%9d %10s %s\n", $d{'ID'}, $d{'Expires'}, $d{'Name'};
+}
+}
+status("Voip.ms infoz");
+
+print "Balance\n",
+my $balinfo= $voip->getBalance();
+my $fmt = "%0.8f\n";
+printf $fmt, $balinfo;
+
+my $res = $voip->getCallAccounts;
+printf "%3s %12s %3s %s\n",
+	"ID","Value","Reg","Host";
+my $count = 1;
+foreach my $acct (@{$res}) {
+	if ($acct->{value} eq "all") {
+		next;
+	}
+	printf "%2d. %12s", $count++, $acct->{value};
+	my $res2 = $voip->getRegistrationStatus(account => $acct->{value});
+	my $regs = "";
+	foreach my $r (@{$res2->{registrations}}) {
+		$regs .= $r->{server_hostname}.",";
+	}
+	$regs =~ s/,$//;
+	printf " %3s %s\n", $res2->{registered}, $regs;
+}
+
+1;
+
+sub status {
+	my ($str) = @_;
+
+	print "\n==> $str status\n";
+}
