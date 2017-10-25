@@ -17,6 +17,9 @@
 use strict;
 use warnings;
 
+use Config::Tiny;
+my $config;
+
 STDERR->autoflush(1);
 STDOUT->autoflush(1);
 
@@ -29,26 +32,8 @@ my $hconf = $ENV{'HOME'}."/.hcli.conf";
 if (! -f $hconf) {
         die("config file '$hconf' does not exist");
 }
-if (!open(C,$hconf)) {
-        die("could not open $hconf");
-}
-my $hconfig;
-my $line;
-while(<C>) {
-        if (/^\s*$/ || /^\s*#/) {
-                next;
-        }
-        chomp($line=$_);
-        if ($line =~ /^\s*(\S+)\s*=\s*(.*)\s*$/) {
-                my ($var,$val) = ($1, $2);
-                #printf "loadconf found '%s' = '%s'\n", $var, $val;
-
-                $hconfig->{$var}=$val;
-                next;
-        }
-        printf "Unhandled config line: %s\n", $line;
-}
-close(C);
+$config = Config::Tiny->read( $hconf );
+my $hconfig = $config->{_};
 
 my $hetzner = WWW::Hetzner->new(
         huser => $hconfig->{huser},
@@ -69,29 +54,11 @@ my $nconf=$ENV{'HOME'}."/.namecheap.conf";
 if (! -f $nconf) {
         die "need a conf file, $nconf not found";
 }
-my %nconfig;
-open(CONF,$nconf);
-while(<CONF>) {
-        if (/^\s*#/) {
-                next;
-        }
-        my $line;
-        chomp($line=$_);
-        if ($line =~ /^([^=]+)\s*=\s*(.*$)/) {
-                my ($var,$val)=($1,$2);
-                if (!defined($var) || !defined($val)) {
-                        next;
-                }
-                if (0) {
-                        printf STDERR "nconfig: '%s'='%s'\n", $var,$val;
-                }
-                $nconfig{$var}=$val;
-        }
-}
-close(CONF);
+$config = Config::Tiny->read( $nconf );
+my $nconfig = $config->{_};
 
-my $napiuser=$nconfig{'apiuser'};
-my $napikey=$nconfig{'apikey'};
+my $napiuser=$nconfig->{'apiuser'};
+my $napikey=$nconfig->{'apikey'};
 
 if (!defined($napiuser) || !defined($napikey)) {
         die "napiuser and napikey must be defined in the config file: $nconf";
@@ -101,7 +68,7 @@ my $namecheap = WWW::Namecheap::API->new(
         System => 'prod',
         ApiUser => $napiuser,
         ApiKey => $napikey,
-        DefaultIp => $nconfig{'defaultip'},
+        DefaultIp => $nconfig->{'defaultip'},
         #DefaultUser
         #ApiUrl
         #Agent
@@ -117,24 +84,11 @@ my $namecheap = WWW::Namecheap::API->new(
 use VOIP::MS;
 
 my $vconf = $ENV{'HOME'}."/.voipms.conf";
-my $vconfig = { };
-if (-f $vconf) {
-        if (!open(CF,"$vconf")) {
-                print "open of $vconf failed, aborting\n";
-                exit(1);
-        }
-        my $line;
-        while(<CF>) {
-                chomp($line = $_);
-                if ($line =~ /^([a-zA-Z][a-zA-Z_0-9]*)\s*=\s*(.*)$/) {
-                        my ($var, $val) = ($1,$2);
-                        $vconfig->{$var} = $val;
-                        #printf "vconfig: '%s' = '%s'\n",$var,$val;
-                }
-        }
-} else {
+if (! -f $vconf) {
         die("vconfig file $vconf does not exist, need user and pass from it, bailing");
 }
+$config = Config::Tiny->read($vconf);
+my $vconfig = $config->{_};
 if (!defined($vconfig->{user}) || !defined($vconfig->{pass})) {
         print "User or Pass is Null and void, bailing for now\n";
         exit(1);
@@ -156,29 +110,17 @@ use Finance::OFX::Account;
 my ($org,$fid,$url,$user,$pass);
 my $oconf = $ENV{'HOME'}."/.ofxcli.conf";
 
-my %oconfig;
-open(C,$oconf);
-my $line;
-while(<C>) {
-        if (/^\s*$/ || /^\s+#.*/) {
-                next;
-        }
-        chomp($line=$_);
-        if ($line =~ /^([^=]+)\s*=\s*(.*$)/) {
-                my ($var,$val)=($1,$2);
-                if (!defined($var) || !defined($val)) {
-                        next;
-                }
-                $oconfig{$var}=$val;
-        }
+if (! -f $oconf) {
+	die("$oconf not found, bailing");
 }
-close(C);
+$config = Config::Tiny->read($oconf);
+my $oconfig = $config->{_};
 
-$org=$oconfig{org};
-$fid=$oconfig{fid};
-$url=$oconfig{url};
-$user=$oconfig{user};
-$pass=$oconfig{pass};
+$org=$oconfig->{org};
+$fid=$oconfig->{fid};
+$url=$oconfig->{url};
+$user=$oconfig->{user};
+$pass=$oconfig->{pass};
 
 my $fi = Finance::OFX::Institution->new(ORG=>$org, FID=>$fid, URL=>$url);
 my $ofx = Finance::OFX->new(
@@ -194,7 +136,7 @@ my $ofx = Finance::OFX->new(
 #
 # END CaptalOne360
 #
-if (0) {
+if (1) {
 status("Hetzner server");
 
 my @hservers = $hetzner->servers;
@@ -245,19 +187,6 @@ foreach my $acct (@{$res}) {
 status("CapitalOne360");
 
 my @accounts = $ofx->accounts;
-my $fi = Finance::OFX::Institution->new(ORG=>$org, FID=>$fid, URL=>$url);
-my $ofx = Finance::OFX->new(
-        userID=>$user,
-        userPass=>$pass,
-        Institution=>$fi,
-        ssl_opts => {
-                # XXX without this, we don't like the cert somehow, fixme!!!
-                verify_hostname => 0,
-        },
-);
-
-my @accounts = $ofx->accounts;
-
 if (! @accounts) {
         printf "Something went wrong: %s\n", $ofx->response;
         exit(1);
@@ -274,6 +203,7 @@ print "    Account Available    Ledger\n";
 print "     Number   Balance   Balance     Type Name\n";
 my $afmt = "%11d %9.2f %9.2f %8s %s\n";
 
+my $totalbalance=0.0;
 foreach my $acct (@accounts) {
         if (!defined($acct)) {
                 next;
@@ -282,9 +212,6 @@ foreach my $acct (@accounts) {
                 printf "Account is not a hash: %s\n", $acct;
                 next;
         }
-        #print "Account is a ".ref($acct)."\n";
-        #print "Account info dumped:\n";
-        #print recurse_dump($acct);
         my $id = $acct->{acctid};
         my $type = $acct->{accttype};
         my $desc = $acct->{desc};
@@ -294,29 +221,15 @@ foreach my $acct (@accounts) {
                 ID => $id,
                 FID => $fid
         );
-        #my $bal = $ofx->balance( $acct_obj );
-        #if (defined($bal)) {
-        #       print "ofx->balance( \$acct ): ". recurse_dump( $bal );
-        #       next;
-        #}
-        # some institutions ignore start/end, others require it
-        #  Capital One 360 requires it, so lets just say now and be done
-        # statement(acct, start=> <date>, end=> <date>, transactions =>
         my $now = time();
         my $r = $ofx->{ua}->statement($acct_obj, start=> $now, end=> $now);
         my $trans = $r->ofx->{bankmsgsrsv1}{stmttrnrs};
         my $availbal = $trans->{stmtrs}->{availbal}->{balamt};
         my $ledgerbal = $trans->{stmtrs}->{ledgerbal}->{balamt};
         printf $afmt, $id, $availbal, $ledgerbal, $type, $desc;
-        #print "${id} statement: ".recurse_dump($r);
-        #if (ref($r) eq "OFX::Finance::Response") {
-                #print "${id} statement: ".recurse_dump($r);
-                #print "${id} statement: ".recurse_dump($r->{ofx});
-                #print "${id} transaction: ".recurse_dump($trans);
-        #}
-        # XXX temp until kinks worked out
-        #last;
+	$totalbalance += $ledgerbal;
 }
+printf $afmt, 0, 0.0, $totalbalance, "", "Total";
 
 1;
 
