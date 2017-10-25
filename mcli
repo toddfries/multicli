@@ -184,7 +184,7 @@ foreach my $acct (@{$res}) {
 	if ($acct->{value} eq "all") {
 		next;
 	}
-	printf "%2d. %12s", $count++, $acct->{value};
+	printf "%2d. %-12s", $count++, $acct->{value};
 	my $res2 = $voip->getRegistrationStatus(account => $acct->{value});
 	my $regs = "";
 	foreach my $r (@{$res2->{registrations}}) {
@@ -193,6 +193,7 @@ foreach my $acct (@{$res}) {
 	$regs =~ s/,$//;
 	printf " %3s %s\n", $res2->{registered}, $regs;
 }
+
 
 1;
 
