@@ -146,6 +146,54 @@ my $voip = VOIP::MS->new(username => $vconfig->{user},
 # END Voip.ms
 #
 
+#
+# BEGIN CapitalOne360
+#
+use Finance::OFX;
+use Finance::OFX::Institution;
+use Finance::OFX::Account;
+
+my ($org,$fid,$url,$user,$pass);
+my $oconf = $ENV{'HOME'}."/.ofxcli.conf";
+
+my %oconfig;
+open(C,$oconf);
+my $line;
+while(<C>) {
+        if (/^\s*$/ || /^\s+#.*/) {
+                next;
+        }
+        chomp($line=$_);
+        if ($line =~ /^([^=]+)\s*=\s*(.*$)/) {
+                my ($var,$val)=($1,$2);
+                if (!defined($var) || !defined($val)) {
+                        next;
+                }
+                $oconfig{$var}=$val;
+        }
+}
+close(C);
+
+$org=$oconfig{org};
+$fid=$oconfig{fid};
+$url=$oconfig{url};
+$user=$oconfig{user};
+$pass=$oconfig{pass};
+
+my $fi = Finance::OFX::Institution->new(ORG=>$org, FID=>$fid, URL=>$url);
+my $ofx = Finance::OFX->new(
+        userID=>$user,
+        userPass=>$pass,
+        Institution=>$fi,
+        ssl_opts => {
+                # XXX without this, we don't like the cert somehow, fixme!!!
+                verify_hostname => 0,
+        },
+);
+
+#
+# END CaptalOne360
+#
 if (0) {
 status("Hetzner server");
 
@@ -194,6 +242,81 @@ foreach my $acct (@{$res}) {
 	printf " %3s %s\n", $res2->{registered}, $regs;
 }
 
+status("CapitalOne360");
+
+my @accounts = $ofx->accounts;
+my $fi = Finance::OFX::Institution->new(ORG=>$org, FID=>$fid, URL=>$url);
+my $ofx = Finance::OFX->new(
+        userID=>$user,
+        userPass=>$pass,
+        Institution=>$fi,
+        ssl_opts => {
+                # XXX without this, we don't like the cert somehow, fixme!!!
+                verify_hostname => 0,
+        },
+);
+
+my @accounts = $ofx->accounts;
+
+if (! @accounts) {
+        printf "Something went wrong: %s\n", $ofx->response;
+        exit(1);
+}
+print "Seems ok so far:\n";
+#print recurse_dump($ofx->response->ofx_header());
+#print "Response:\n";
+#print recurse_dump($ofx->response);
+my $status = $ofx->response->signon_status_code( $fi );
+printf "Signon status code: %s\n", defined($status) ? $status : "<undef>";
+
+      # 1179955919 150002.02 140002.02 CHECKING ING Medical Fund
+print "    Account Available    Ledger\n";
+print "     Number   Balance   Balance     Type Name\n";
+my $afmt = "%11d %9.2f %9.2f %8s %s\n";
+
+foreach my $acct (@accounts) {
+        if (!defined($acct)) {
+                next;
+        }
+        if (ref($acct) eq "") {
+                printf "Account is not a hash: %s\n", $acct;
+                next;
+        }
+        #print "Account is a ".ref($acct)."\n";
+        #print "Account info dumped:\n";
+        #print recurse_dump($acct);
+        my $id = $acct->{acctid};
+        my $type = $acct->{accttype};
+        my $desc = $acct->{desc};
+        my $acct_obj = Finance::OFX::Account->new(
+                URL => $url,
+                Type => $type,
+                ID => $id,
+                FID => $fid
+        );
+        #my $bal = $ofx->balance( $acct_obj );
+        #if (defined($bal)) {
+        #       print "ofx->balance( \$acct ): ". recurse_dump( $bal );
+        #       next;
+        #}
+        # some institutions ignore start/end, others require it
+        #  Capital One 360 requires it, so lets just say now and be done
+        # statement(acct, start=> <date>, end=> <date>, transactions =>
+        my $now = time();
+        my $r = $ofx->{ua}->statement($acct_obj, start=> $now, end=> $now);
+        my $trans = $r->ofx->{bankmsgsrsv1}{stmttrnrs};
+        my $availbal = $trans->{stmtrs}->{availbal}->{balamt};
+        my $ledgerbal = $trans->{stmtrs}->{ledgerbal}->{balamt};
+        printf $afmt, $id, $availbal, $ledgerbal, $type, $desc;
+        #print "${id} statement: ".recurse_dump($r);
+        #if (ref($r) eq "OFX::Finance::Response") {
+                #print "${id} statement: ".recurse_dump($r);
+                #print "${id} statement: ".recurse_dump($r->{ofx});
+                #print "${id} transaction: ".recurse_dump($trans);
+        #}
+        # XXX temp until kinks worked out
+        #last;
+}
 
 1;
 
