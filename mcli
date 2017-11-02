@@ -18,22 +18,21 @@ use strict;
 use warnings;
 
 use Config::Tiny;
+use Getopt::Std;
 my $config;
 
 STDERR->autoflush(1);
 STDOUT->autoflush(1);
+
+our $opt_p;
+getopt('p:');
 
 #
 # BEGIN Hetzner
 #
 use WWW::Hetzner;
 
-my $hconf = $ENV{'HOME'}."/.hcli.conf";
-if (! -f $hconf) {
-        die("config file '$hconf' does not exist");
-}
-$config = Config::Tiny->read( $hconf );
-my $hconfig = $config->{_};
+my $hconfig = readconf($ENV{'HOME'}."/.hcli.conf")->{_};
 
 my $hetzner = WWW::Hetzner->new(
         huser => $hconfig->{huser},
@@ -50,12 +49,8 @@ my $hetzner = WWW::Hetzner->new(
 
 use WWW::Namecheap::API;
 
-my $nconf=$ENV{'HOME'}."/.namecheap.conf";
-if (! -f $nconf) {
-        die "need a conf file, $nconf not found";
-}
-$config = Config::Tiny->read( $nconf );
-my $nconfig = $config->{_};
+my $nconf = $ENV{'HOME'}."/.namecheap.conf";
+my $nconfig = readconf($nconf)->{_};
 
 my $napiuser=$nconfig->{'apiuser'};
 my $napikey=$nconfig->{'apikey'};
@@ -69,9 +64,6 @@ my $namecheap = WWW::Namecheap::API->new(
         ApiUser => $napiuser,
         ApiKey => $napikey,
         DefaultIp => $nconfig->{'defaultip'},
-        #DefaultUser
-        #ApiUrl
-        #Agent
 );
 
 #
@@ -83,18 +75,15 @@ my $namecheap = WWW::Namecheap::API->new(
 #
 use VOIP::MS;
 
-my $vconf = $ENV{'HOME'}."/.voipms.conf";
-if (! -f $vconf) {
-        die("vconfig file $vconf does not exist, need user and pass from it, bailing");
-}
-$config = Config::Tiny->read($vconf);
-my $vconfig = $config->{_};
+my $vconfig = readconf($ENV{'HOME'}."/.voipms.conf")->{_};
 if (!defined($vconfig->{user}) || !defined($vconfig->{pass})) {
         print "User or Pass is Null and void, bailing for now\n";
         exit(1);
 }
-my $voip = VOIP::MS->new(username => $vconfig->{user},
-        password => $vconfig->{pass});
+my $voip = VOIP::MS->new(
+	username => $vconfig->{user},
+        password => $vconfig->{pass},
+);
 
 #
 # END Voip.ms
@@ -108,13 +97,7 @@ use Finance::OFX::Institution;
 use Finance::OFX::Account;
 
 my ($org,$fid,$url,$user,$pass);
-my $oconf = $ENV{'HOME'}."/.ofxcli.conf";
-
-if (! -f $oconf) {
-	die("$oconf not found, bailing");
-}
-$config = Config::Tiny->read($oconf);
-my $oconfig = $config->{_};
+my $oconfig = readconf( $ENV{'HOME'}."/.ofxcli.conf" )->{_};
 
 $org=$oconfig->{org};
 $fid=$oconfig->{fid};
@@ -136,100 +119,29 @@ my $ofx = Finance::OFX->new(
 #
 # END CaptalOne360
 #
-if (1) {
-status("Hetzner server");
 
-my @hservers = $hetzner->servers;
-printf "%7s %12s %10s\n", "Number","Name","Cancel Date";
-foreach my $s (@hservers) {
-	printf "%7d %12s %10s\n",
-		$s->get('server_number'),
-		$s->get('server_name'),
-		$s->get('paid_until');
+if ($opt_p eq "hetzner") {
+	hetzner($hetzner);
 }
 
-status("Namecheap domain");
-
-my $dns = $namecheap->dns();
-my $domlist = $dns->getdomains();
-
-foreach my $dd (@{$domlist->{Domain}}) {
-	my %d = %{$dd};
-	my $dom = $d{'Name'};
-	printf STDERR "%9d %10s %s\n", $d{'ID'}, $d{'Expires'}, $d{'Name'};
-}
-}
-status("Voip.ms infoz");
-
-print "Balance\n",
-my $balinfo= $voip->getBalance();
-my $fmt = "%0.8f\n";
-printf $fmt, $balinfo;
-
-my $res = $voip->getCallAccounts;
-printf "%3s %12s %3s %s\n",
-	"ID","Value","Reg","Host";
-my $count = 1;
-foreach my $acct (@{$res}) {
-	if ($acct->{value} eq "all") {
-		next;
-	}
-	printf "%2d. %-12s", $count++, $acct->{value};
-	my $res2 = $voip->getRegistrationStatus(account => $acct->{value});
-	my $regs = "";
-	foreach my $r (@{$res2->{registrations}}) {
-		$regs .= $r->{server_hostname}.",";
-	}
-	$regs =~ s/,$//;
-	printf " %3s %s\n", $res2->{registered}, $regs;
+if ($opt_p eq "namecheap") {
+	namecheap($namecheap);
 }
 
-status("CapitalOne360");
-
-my @accounts = $ofx->accounts;
-if (! @accounts) {
-        printf "Something went wrong: %s\n", $ofx->response;
-        exit(1);
+if ($opt_p eq "voipms") {
+	voipms($voip);
 }
-print "Seems ok so far:\n";
-#print recurse_dump($ofx->response->ofx_header());
-#print "Response:\n";
-#print recurse_dump($ofx->response);
-my $status = $ofx->response->signon_status_code( $fi );
-printf "Signon status code: %s\n", defined($status) ? $status : "<undef>";
 
-      # 1179955919 150002.02 140002.02 CHECKING ING Medical Fund
-print "    Account Available    Ledger\n";
-print "     Number   Balance   Balance     Type Name\n";
-my $afmt = "%11d %9.2f %9.2f %8s %s\n";
-
-my $totalbalance=0.0;
-foreach my $acct (@accounts) {
-        if (!defined($acct)) {
-                next;
-        }
-        if (ref($acct) eq "") {
-                printf "Account is not a hash: %s\n", $acct;
-                next;
-        }
-        my $id = $acct->{acctid};
-        my $type = $acct->{accttype};
-        my $desc = $acct->{desc};
-        my $acct_obj = Finance::OFX::Account->new(
-                URL => $url,
-                Type => $type,
-                ID => $id,
-                FID => $fid
-        );
-        my $now = time();
-        my $r = $ofx->{ua}->statement($acct_obj, start=> $now, end=> $now);
-        my $trans = $r->ofx->{bankmsgsrsv1}{stmttrnrs};
-        my $availbal = $trans->{stmtrs}->{availbal}->{balamt};
-        my $ledgerbal = $trans->{stmtrs}->{ledgerbal}->{balamt};
-        printf $afmt, $id, $availbal, $ledgerbal, $type, $desc;
-	$totalbalance += $ledgerbal;
+if ($opt_p eq "c1360") {
+	c1360($ofx);
 }
-printf $afmt, 0, 0.0, $totalbalance, "", "Total";
+
+if (0) {
+use Finance::BlockIO;
+
+my $ret = Finance::BlockIO->get_current_price;
+print "BlockIO price ret: ",$ret,"\n";
+}
 
 1;
 
@@ -237,4 +149,121 @@ sub status {
 	my ($str) = @_;
 
 	print "\n==> $str status\n";
+}
+
+sub readconf {
+	my ($conf) = @_;
+	if (! -f $conf) {
+        	die("config file '$conf' does not exist");
+	}
+	$config = Config::Tiny->read( $conf );
+	return $config;
+}
+
+sub hetzner {
+	my ($hetzner) = @_;
+
+	status("Hetzner server");
+
+	my @hservers = $hetzner->servers;
+	printf "%7s %12s %10s\n", "Number","Name","Cancel Date";
+	foreach my $s (@hservers) {
+		printf "%7d %12s %10s\n",
+			$s->get('server_number'),
+			$s->get('server_name'),
+			$s->get('paid_until');
+	}
+}
+
+sub namecheap {
+	my ($namecheap) = @_;
+	status("Namecheap domain");
+
+	my $dns = $namecheap->dns();
+	my $domlist = $dns->getdomains();
+
+	foreach my $dd (@{$domlist->{Domain}}) {
+		my %d = %{$dd};
+		my $dom = $d{'Name'};
+		printf STDERR "%9d %10s %s\n", $d{'ID'}, $d{'Expires'}, $d{'Name'};
+	}
+}
+
+sub voipms {
+	my ($voip) = @_;
+
+	status("Voip.ms infoz");
+
+	print "Balance\n",
+	my $balinfo= $voip->getBalance();
+	my $fmt = "%0.8f\n";
+	printf $fmt, $balinfo;
+
+	my $res = $voip->getCallAccounts;
+	printf "%3s %12s %3s %s\n",
+		"ID","Value","Reg","Host";
+	my $count = 1;
+	foreach my $acct (@{$res}) {
+		if ($acct->{value} eq "all") {
+			next;
+		}
+		printf "%2d. %-12s", $count++, $acct->{value};
+		my $res2 = $voip->getRegistrationStatus(account => $acct->{value});
+		my $regs = "";
+		foreach my $r (@{$res2->{registrations}}) {
+			$regs .= $r->{server_hostname}.",";
+		}
+		$regs =~ s/,$//;
+		printf " %3s %s\n", $res2->{registered}, $regs;
+	}
+}
+
+sub c1360 {
+	my ($ofx) = @_;
+	status("CapitalOne360");
+
+	my @accounts = $ofx->accounts;
+	if (! @accounts) {
+        	printf "Something went wrong: %s\n", $ofx->response;
+        	exit(1);
+	}
+	print "Seems ok so far:\n";
+	#print recurse_dump($ofx->response->ofx_header());
+	#print "Response:\n";
+	#print recurse_dump($ofx->response);
+	my $status = $ofx->response->signon_status_code( $fi );
+	printf "Signon status code: %s\n", defined($status) ? $status : "<undef>";
+
+      # 1179955919 150002.02 140002.02 CHECKING ING Medical Fund
+	print "    Account Available    Ledger\n";
+	print "     Number   Balance   Balance     Type Name\n";
+	my $afmt = "%11d %9.2f %9.2f %8s %s\n";
+
+	my $totalbalance=0.0;
+	foreach my $acct (@accounts) {
+        	if (!defined($acct)) {
+                	next;
+        	}
+        	if (ref($acct) eq "") {
+                	printf "Account is not a hash: %s\n", $acct;
+                	next;
+        	}
+        	my $id = $acct->{acctid};
+        	my $type = $acct->{accttype};
+        	my $desc = $acct->{desc};
+        	my $acct_obj = Finance::OFX::Account->new(
+                	URL => $url,
+                	Type => $type,
+                	ID => $id,
+                	FID => $fid
+        	);
+        	my $now = time();
+        	my $r = $ofx->{ua}->statement($acct_obj, start=> $now, end=> $now);
+        	my $trans = $r->ofx->{bankmsgsrsv1}{stmttrnrs};
+        	my $availbal = $trans->{stmtrs}->{availbal}->{balamt};
+        	my $ledgerbal = $trans->{stmtrs}->{ledgerbal}->{balamt};
+        	printf $afmt, $id, $availbal, $ledgerbal, $type, $desc;
+		$totalbalance += $ledgerbal;
+	}
+	printf $afmt, 0, 0.0, $totalbalance, "", "Total";
 }
