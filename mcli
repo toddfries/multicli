@@ -194,9 +194,9 @@ sub voipms {
 
 	status("Voip.ms infoz");
 
-	print "Balance\n",
+	print "Balance: ";
 	my $balinfo= $voip->getBalance();
-	my $fmt = "%0.8f\n";
+	my $fmt = "%0.4f\n";
 	printf $fmt, $balinfo;
 
 	my $res = $voip->getCallAccounts;
