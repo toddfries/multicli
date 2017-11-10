@@ -18,8 +18,8 @@ use strict;
 use warnings;
 
 use Config::Tiny;
+use Date::Manip;
 use Getopt::Std;
-my $config;
 
 STDERR->autoflush(1);
 STDOUT->autoflush(1);
@@ -31,6 +31,9 @@ if (!defined($opt_p)) {
 	$opt_p = "all";
 }
 
+our $namecheap;
+
+
 #
 # BEGIN Hetzner
 #
@@ -39,40 +42,14 @@ use WWW::Hetzner;
 my $hconfig = readconf($ENV{'HOME'}."/.hcli.conf")->{_};
 
 my $hetzner = WWW::Hetzner->new(
-        huser => $hconfig->{huser},
-        hpass => $hconfig->{hpass},
+	huser => $hconfig->{huser},
+	hpass => $hconfig->{hpass},
 );
 
 #
 # END Hetzner
 #
 
-#
-# BEGIN Namecheap
-#
-
-use WWW::Namecheap::API;
-
-my $nconf = $ENV{'HOME'}."/.namecheap.conf";
-my $nconfig = readconf($nconf)->{_};
-
-my $napiuser=$nconfig->{'apiuser'};
-my $napikey=$nconfig->{'apikey'};
-
-if (!defined($napiuser) || !defined($napikey)) {
-        die "napiuser and napikey must be defined in the config file: $nconf";
-}
-my $namecheap = WWW::Namecheap::API->new(
-        #System => 'test',
-        System => 'prod',
-        ApiUser => $napiuser,
-        ApiKey => $napikey,
-        DefaultIp => $nconfig->{'defaultip'},
-);
-
-#
-# END Namecheap
-#
 
 #
 # BEGIN Voip.ms
@@ -81,12 +58,12 @@ use VOIP::MS;
 
 my $vconfig = readconf($ENV{'HOME'}."/.voipms.conf")->{_};
 if (!defined($vconfig->{user}) || !defined($vconfig->{pass})) {
-        print "User or Pass is Null and void, bailing for now\n";
-        exit(1);
+	print "User or Pass is Null and void, bailing for now\n";
+	exit(1);
 }
 my $voip = VOIP::MS->new(
 	username => $vconfig->{user},
-        password => $vconfig->{pass},
+	password => $vconfig->{pass},
 );
 
 #
@@ -111,13 +88,13 @@ $pass=$oconfig->{pass};
 
 my $fi = Finance::OFX::Institution->new(ORG=>$org, FID=>$fid, URL=>$url);
 my $ofx = Finance::OFX->new(
-        userID=>$user,
-        userPass=>$pass,
-        Institution=>$fi,
-        ssl_opts => {
-                # XXX without this, we don't like the cert somehow, fixme!!!
-                verify_hostname => 0,
-        },
+	userID=>$user,
+	userPass=>$pass,
+	Institution=>$fi,
+	ssl_opts => {
+		# XXX without this, we don't like the cert somehow, fixme!!!
+		verify_hostname => 0,
+	},
 );
 
 #
@@ -126,7 +103,7 @@ my $ofx = Finance::OFX->new(
 
 if ($opt_p eq "all") {
 	hetzner($hetzner);
-	namecheap($namecheap);
+	namecheap();
 	voipms($voip);
 	c1360($ofx);
 }
@@ -136,7 +113,7 @@ if ($opt_p eq "hetzner") {
 }
 
 if ($opt_p eq "namecheap") {
-	namecheap($namecheap);
+	namecheap();
 }
 
 if ($opt_p eq "voipms") {
@@ -165,9 +142,9 @@ sub status {
 sub readconf {
 	my ($conf) = @_;
 	if (! -f $conf) {
-        	die("config file '$conf' does not exist");
+		die("config file '$conf' does not exist");
 	}
-	$config = Config::Tiny->read( $conf );
+	my $config = Config::Tiny->read( $conf );
 	return $config;
 }
 
@@ -187,17 +164,47 @@ sub hetzner {
 }
 
 sub namecheap {
-	my ($namecheap) = @_;
+
+	if (!defined($namecheap)) {
+		namecheap_setup();
+	}
+
 	status("Namecheap domain");
 
 	my $dns = $namecheap->dns();
 	my $domlist = $dns->getdomains();
 
 	foreach my $dd (@{$domlist->{Domain}}) {
+		$dd->{ExpiresUD} = UnixDate(ParseDate($dd->{Expires}),"%s");
+	}
+
+	foreach my $dd (sort { $a->{ExpiresUD} <=> $b->{ExpiresUD} } @{$domlist->{Domain}}) {
 		my %d = %{$dd};
 		my $dom = $d{'Name'};
 		printf STDERR "%9d %10s %s\n", $d{'ID'}, $d{'Expires'}, $d{'Name'};
 	}
+}
+
+sub namecheap_setup {
+	use WWW::Namecheap::API;
+
+	my $nconf = $ENV{'HOME'}."/.namecheap.conf";
+	my $nconfig = readconf($nconf)->{_};
+
+	my $napiuser=$nconfig->{'apiuser'};
+	my $napikey=$nconfig->{'apikey'};
+
+	if (!defined($napiuser) || !defined($napikey)) {
+		die "napiuser and napikey must be defined in the config file: $nconf";
+	}
+
+	$namecheap = WWW::Namecheap::API->new(
+		#System => 'test',
+		System => 'prod',
+		ApiUser => $napiuser,
+		ApiKey => $napikey,
+		DefaultIp => $nconfig->{'defaultip'},
+	);
 }
 
 sub voipms {
@@ -235,8 +242,8 @@ sub c1360 {
 
 	my @accounts = $ofx->accounts;
 	if (! @accounts) {
-        	printf "Something went wrong: %s\n", $ofx->response;
-        	exit(1);
+		printf "Something went wrong: %s\n", $ofx->response;
+		exit(1);
 	}
 	print "Seems ok so far:\n";
 	#print recurse_dump($ofx->response->ofx_header());
@@ -245,35 +252,35 @@ sub c1360 {
 	my $status = $ofx->response->signon_status_code( $fi );
 	printf "Signon status code: %s\n", defined($status) ? $status : "<undef>";
 
-      # 1179955919 150002.02 140002.02 CHECKING ING Medical Fund
+	# 1179955919 150002.02 140002.02 CHECKING ING Medical Fund
 	print "    Account Available    Ledger\n";
 	print "     Number   Balance   Balance     Type Name\n";
 	my $afmt = "%11d %9.2f %9.2f %8s %s\n";
 
 	my $totalbalance=0.0;
 	foreach my $acct (@accounts) {
-        	if (!defined($acct)) {
-                	next;
-        	}
-        	if (ref($acct) eq "") {
-                	printf "Account is not a hash: %s\n", $acct;
-                	next;
-        	}
-        	my $id = $acct->{acctid};
-        	my $type = $acct->{accttype};
-        	my $desc = $acct->{desc};
-        	my $acct_obj = Finance::OFX::Account->new(
-                	URL => $url,
-                	Type => $type,
-                	ID => $id,
-                	FID => $fid
-        	);
-        	my $now = time();
-        	my $r = $ofx->{ua}->statement($acct_obj, start=> $now, end=> $now);
-        	my $trans = $r->ofx->{bankmsgsrsv1}{stmttrnrs};
-        	my $availbal = $trans->{stmtrs}->{availbal}->{balamt};
-        	my $ledgerbal = $trans->{stmtrs}->{ledgerbal}->{balamt};
-        	printf $afmt, $id, $availbal, $ledgerbal, $type, $desc;
+		if (!defined($acct)) {
+			next;
+		}
+		if (ref($acct) eq "") {
+			printf "Account is not a hash: %s\n", $acct;
+			next;
+		}
+		my $id = $acct->{acctid};
+		my $type = $acct->{accttype};
+		my $desc = $acct->{desc};
+		my $acct_obj = Finance::OFX::Account->new(
+			URL => $url,
+			Type => $type,
+			ID => $id,
+			FID => $fid
+		);
+		my $now = time();
+		my $r = $ofx->{ua}->statement($acct_obj, start=> $now, end=> $now);
+		my $trans = $r->ofx->{bankmsgsrsv1}{stmttrnrs};
+		my $availbal = $trans->{stmtrs}->{availbal}->{balamt};
+		my $ledgerbal = $trans->{stmtrs}->{ledgerbal}->{balamt};
+		printf $afmt, $id, $availbal, $ledgerbal, $type, $desc;
 		$totalbalance += $ledgerbal;
 	}
 	printf $afmt, 0, 0.0, $totalbalance, "", "Total";
