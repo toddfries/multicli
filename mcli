@@ -20,6 +20,7 @@ use warnings;
 use Config::Tiny;
 use Date::Manip;
 use Getopt::Std;
+use Data::Dumper;
 
 STDERR->autoflush(1);
 STDOUT->autoflush(1);
@@ -32,6 +33,7 @@ if (!defined($opt_p)) {
 }
 
 our $namecheap;
+our $coinbase;
 
 
 #
@@ -124,6 +126,10 @@ if ($opt_p eq "c1360") {
 	c1360($ofx);
 }
 
+if ($opt_p eq "coinbase") {
+	coinbase();
+}
+
 if (0) {
 use Finance::BlockIO;
 
@@ -162,6 +168,81 @@ sub hetzner {
 			$s->get('paid_until');
 	}
 }
+
+sub coinbase {
+	if (!defined($coinbase)) {
+		coinbase_setup();
+	}
+
+	status("Coinbase spot price");
+
+	my $price = $coinbase->get_spot_price("USD");
+	printf "Current bitcoin price in %s: %s\n", "USD", $price;
+
+	my @resp = $coinbase->get_accounts();
+	my @accts;
+	foreach my $parsed (@resp) {
+		if (defined($parsed->{data})) {
+			foreach my $k ($parsed->{data}) {
+				if (ref($k) eq "ARRAY") {
+					foreach my $l (@{$k}) {
+						push @accts,$l;
+					}
+				}
+			}
+		}
+	}
+	foreach my $a (sort coinbase_order_accts @accts) {
+		printf "%-26s: %12.8f %s = %8.2f %s (%s)\n",
+		    $a->{name},
+		    $a->{balance}->{amount},
+		    $a->{balance}->{currency},
+		    $a->{native_balance}->{amount},
+		    $a->{native_balance}->{currency},
+		    $a->{type};
+	}
+
+}
+
+sub coinbase_setup {
+	use WebService::CoinBase::v2;
+
+	my @scopes = (
+        	"wallet:accounts:read",
+        	"wallet:checkouts:read",
+        	"wallet:checkouts:create",
+        	#"wallet:orders:read",
+        	#"wallet:orders:create",
+        	"wallet:transactions:read",
+        	"wallet:user:read",
+	);
+
+	my $scope = "";
+	foreach my $s (@scopes) {
+        	if (defined($scope)) {
+                	$scope .= ",".$s;
+        	} else {
+                	$scope = $s;
+        	}
+	}
+	$coinbase = WebService::CoinBase::v2->new(
+		scopes => $scope,
+	);
+}
+
+sub coinbase_order_accts {
+	my $res;
+	$res = $a->{type} cmp $b->{type};
+	if ($res != 0) {
+		return $res*-1;
+	}
+	$res = $a->{currency} cmp $b->{currency};
+	if ($res != 0) {
+		return $res;
+	}
+	return $a->{name} cmp $b->{name};
+}
+
 
 sub namecheap {
 
