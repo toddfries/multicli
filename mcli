@@ -176,7 +176,8 @@ sub coinbase {
 
 	status("Coinbase spot price");
 
-	my $price = $coinbase->get_spot_price("USD");
+	my ($res) = $coinbase->get_spot_price("USD");
+	my $price = $res->{data}->{amount};
 	printf "Current bitcoin price in %s: %s\n", "USD", $price;
 
 	my @resp = $coinbase->get_accounts();
