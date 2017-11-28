@@ -193,16 +193,13 @@ sub coinbase {
 			}
 		}
 	}
-	foreach my $a (sort coinbase_order_accts @accts) {
-		printf "%-26s: %12.8f %s = %8.2f %s (%s)\n",
-		    $a->{name},
-		    $a->{balance}->{amount},
-		    $a->{balance}->{currency},
-		    $a->{native_balance}->{amount},
-		    $a->{native_balance}->{currency},
-		    $a->{type};
+	my $totalusd=0.0;
+	foreach my $a (@accts) {
+		$totalusd += $a->{native_balance}->{amount};
 	}
-
+	my $totalbtc=$totalusd/$price;
+	printf "Total in coinbase wallets: %10.8f BTC (%8.3f USD)\n",
+		$totalbtc, $totalusd;
 }
 
 sub coinbase_setup {
