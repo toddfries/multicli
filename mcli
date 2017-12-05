@@ -21,6 +21,7 @@ use Config::Tiny;
 use Date::Manip;
 use Getopt::Std;
 use Data::Dumper;
+use ReadConf;
 
 STDERR->autoflush(1);
 STDOUT->autoflush(1);
@@ -32,86 +33,19 @@ if (!defined($opt_p)) {
 	$opt_p = "all";
 }
 
-our $namecheap;
-our $coinbase;
+our $mcli = { };
 
-
-#
-# BEGIN Hetzner
-#
-use WWW::Hetzner;
-
-my $hconfig = readconf($ENV{'HOME'}."/.hcli.conf")->{_};
-
-my $hetzner = WWW::Hetzner->new(
-	huser => $hconfig->{huser},
-	hpass => $hconfig->{hpass},
-);
-
-#
-# END Hetzner
-#
-
-
-#
-# BEGIN Voip.ms
-#
-use VOIP::MS;
-
-my $vconfig = readconf($ENV{'HOME'}."/.voipms.conf")->{_};
-if (!defined($vconfig->{user}) || !defined($vconfig->{pass})) {
-	print "User or Pass is Null and void, bailing for now\n";
-	exit(1);
-}
-my $voip = VOIP::MS->new(
-	username => $vconfig->{user},
-	password => $vconfig->{pass},
-);
-
-#
-# END Voip.ms
-#
-
-#
-# BEGIN CapitalOne360
-#
-use Finance::OFX;
-use Finance::OFX::Institution;
-use Finance::OFX::Account;
-
-my ($org,$fid,$url,$user,$pass);
-my $oconfig = readconf( $ENV{'HOME'}."/.ofxcli.conf" )->{_};
-
-$org=$oconfig->{org};
-$fid=$oconfig->{fid};
-$url=$oconfig->{url};
-$user=$oconfig->{user};
-$pass=$oconfig->{pass};
-
-my $fi = Finance::OFX::Institution->new(ORG=>$org, FID=>$fid, URL=>$url);
-my $ofx = Finance::OFX->new(
-	userID=>$user,
-	userPass=>$pass,
-	Institution=>$fi,
-	ssl_opts => {
-		# XXX without this, we don't like the cert somehow, fixme!!!
-		verify_hostname => 0,
-	},
-);
-
-#
-# END CaptalOne360
-#
+our $r = ReadConf->new();
 
 if ($opt_p eq "all") {
-	hetzner($hetzner);
+	hetzner();
 	namecheap();
-	voipms($voip);
-	c1360($ofx);
+	voipms();
+	c1360();
 }
 
 if ($opt_p eq "hetzner") {
-	hetzner($hetzner);
+	hetzner();
 }
 
 if ($opt_p eq "namecheap") {
@@ -119,11 +53,11 @@ if ($opt_p eq "namecheap") {
 }
 
 if ($opt_p eq "voipms") {
-	voipms($voip);
+	voipms();
 }
 
 if ($opt_p eq "c1360") {
-	c1360($ofx);
+	c1360();
 }
 
 if ($opt_p eq "coinbase") {
@@ -145,17 +79,12 @@ sub status {
 	print "\n==> $str status\n";
 }
 
-sub readconf {
-	my ($conf) = @_;
-	if (! -f $conf) {
-		die("config file '$conf' does not exist");
-	}
-	my $config = Config::Tiny->read( $conf );
-	return $config;
-}
-
 sub hetzner {
-	my ($hetzner) = @_;
+
+	if (!defined($mcli->{hetzner})) {
+		$mcli->{hetzner} = hetzner_setup();
+	}
+	my $hetzner = $mcli->{hetzner};
 
 	status("Hetzner server");
 
@@ -169,10 +98,23 @@ sub hetzner {
 	}
 }
 
+sub hetzner_setup {
+	use WWW::Hetzner;
+
+	my $hconfig = $r->readconf($ENV{'HOME'}."/.hcli.conf")->{_};
+
+	my $hetzner = WWW::Hetzner->new(
+		huser => $hconfig->{huser},
+		hpass => $hconfig->{hpass},
+	);
+	return $hetzner;
+}
+
 sub coinbase {
-	if (!defined($coinbase)) {
-		coinbase_setup();
+	if (!defined($mcli->{coinbase})) {
+		$mcli->{coinbase} = coinbase_setup();
 	}
+	my $coinbase = $mcli->{coinbase};
 
 	status("Coinbase spot price");
 
@@ -223,9 +165,10 @@ sub coinbase_setup {
                 	$scope = $s;
         	}
 	}
-	$coinbase = WebService::CoinBase::v2->new(
+	my $coinbase = WebService::CoinBase::v2->new(
 		scopes => $scope,
 	);
+	return $coinbase;
 }
 
 sub coinbase_order_accts {
@@ -243,10 +186,10 @@ sub coinbase_order_accts {
 
 
 sub namecheap {
-
-	if (!defined($namecheap)) {
-		namecheap_setup();
+	if (!defined($mcli->{namecheap})) {
+		$mcli->{namecheap} = namecheap_setup();
 	}
+	my $namecheap = $mcli->{namecheap};
 
 	status("Namecheap domain");
 
@@ -265,10 +208,12 @@ sub namecheap {
 }
 
 sub namecheap_setup {
+	my $namecheap;
+
 	use WWW::Namecheap::API;
 
 	my $nconf = $ENV{'HOME'}."/.namecheap.conf";
-	my $nconfig = readconf($nconf)->{_};
+	my $nconfig = $r->readconf($nconf)->{_};
 
 	my $napiuser=$nconfig->{'apiuser'};
 	my $napikey=$nconfig->{'apikey'};
@@ -284,10 +229,14 @@ sub namecheap_setup {
 		ApiKey => $napikey,
 		DefaultIp => $nconfig->{'defaultip'},
 	);
+	return $namecheap;
 }
 
 sub voipms {
-	my ($voip) = @_;
+	if (!defined($mcli->{voipms})) {
+		$mcli->{voipms} = voipms_setup();
+	}
+	my $voip = $mcli->{voipms};
 
 	status("Voip.ms infoz");
 
@@ -315,8 +264,31 @@ sub voipms {
 	}
 }
 
+sub voipms_setup {
+	use VOIP::MS;
+
+	my $vconfig = $r->readconf($ENV{'HOME'}."/.voipms.conf")->{_};
+	if (!defined($vconfig->{user}) || !defined($vconfig->{pass})) {
+		print "User or Pass is Null and void, bailing for now\n";
+		exit(1);
+	}
+	my $voip = VOIP::MS->new(
+		username => $vconfig->{user},
+		password => $vconfig->{pass},
+	);
+	return $voip;
+}
+
+
 sub c1360 {
-	my ($ofx) = @_;
+	if (!defined($mcli->{c1360})) {
+		$mcli->{c1360} = c1360_setup();
+	}
+	my $ofx = $mcli->{c1360};
+	my $fi = $mcli->{c1360_fi};
+	my $url = $mcli->{c1360_url};
+	my $fid = $mcli->{c1360_fid};
+
 	status("CapitalOne360");
 
 	my @accounts = $ofx->accounts;
@@ -363,4 +335,34 @@ sub c1360 {
 		$totalbalance += $ledgerbal;
 	}
 	printf $afmt, 0, 0.0, $totalbalance, "", "Total";
+}
+
+sub c1360_setup {
+	use Finance::OFX;
+	use Finance::OFX::Institution;
+	use Finance::OFX::Account;
+
+	my ($org,$fid,$url,$user,$pass);
+	my $config = $r->readconf( $ENV{'HOME'}."/.ofxcli.conf" )->{_};
+
+	$org=$config->{org};
+	$fid=$config->{fid};
+	$url=$config->{url};
+	$user=$config->{user};
+	$pass=$config->{pass};
+
+	my $fi = Finance::OFX::Institution->new(ORG=>$org, FID=>$fid, URL=>$url);
+	my $ofx = Finance::OFX->new(
+		userID=>$user,
+		userPass=>$pass,
+		Institution=>$fi,
+		ssl_opts => {
+			# XXX without this, we don't like the cert somehow!!!
+			verify_hostname => 0,
+		},
+	);
+	$mcli->{c1360_fi} = $fi;
+	$mcli->{c1360_url} = $url;
+	$mcli->{c1360_fid} = $fid;
+	return $ofx;
 }
