@@ -69,6 +69,9 @@ if ($opt_p eq "coinbase") {
 if ($opt_p eq "kraken") {
 	kraken();
 }
+if ($opt_p eq "bitstamp") {
+	bitstamp();
+}
 
 if (0) {
 use Finance::BlockIO;
@@ -223,7 +226,7 @@ sub kraken {
 		return;
 	}
 	printf "Bid %s\nAsk %s\n", $bid, $ask;
-	printf "Avg %s\n", ($bid+$ask)/2;
+	printf "Avg %s\n", $avg;
 	printf "Low %s %s (today 24hrs)\n", $btcusd->{l}[0], $btcusd->{l}[1];
 	printf "Hi  %s %s (today 24hrs)\n", $btcusd->{h}[0], $btcusd->{h}[1];
 	printf "Vol %s %s (today 24hrs)\n", $btcusd->{v}[0], $btcusd->{v}[1];
@@ -245,6 +248,45 @@ sub kraken_setup {
 
 	my $kraken = Finance::Bank::Kraken->new;
 	return $kraken;
+}
+
+sub bitstamp {
+	#use Finance::BitStamp::API;
+	if (!defined($mcli->{bitstamp})) {
+		$mcli->{bitstamp} = bitstamp_setup();
+	}
+	my $bitstamp = $mcli->{bitstamp};
+
+	status("BitStamp spot price");
+
+	my $res = $bitstamp->ticker;
+	#print Dumper($res);
+	#my $parsed = parse_json( $res, 'kraken' );
+
+	#print Dumper($parsed);
+	my $bid = $res->{bid};
+	my $ask = $res->{ask};
+	my $avg = ($bid+$ask)/2;
+	if ($opt_q > 0) {
+		print $avg;
+		return;
+	}
+	printf "Bid %s\nAsk %s\n", $bid, $ask;
+	printf "Avg %s\n", $avg;
+	printf "Low %s\n", $res->{low};
+	printf "Hi  %s\n", $res->{high};
+	printf "Vol %s\n", $res->{volume};
+}
+
+sub bitstamp_setup {
+	use Finance::BitStamp::API;
+	use JSON;
+	if (!defined($mcli->{JSON})) {
+		$mcli->{JSON} = JSON->new->allow_nonref;
+	}
+
+	my $bitstamp = Finance::BitStamp::API->new;
+	return $bitstamp;
 }
 
 sub namecheap {
