@@ -26,10 +26,12 @@ use ReadConf;
 STDERR->autoflush(1);
 STDOUT->autoflush(1);
 
+our $opt_a;
 our $opt_p;
 our $opt_q = 0;
 our $opt_v = 0;
-getopt('p:q:v');
+
+getopt('a:p:q:v');
 
 if (!defined($opt_p)) {
 	$opt_p = "all";
@@ -207,36 +209,60 @@ sub kraken {
 	}
 	my $kraken = $mcli->{kraken};
 
-	status("Kraken spot price");
-
-	my $res = $kraken->call(Public, 'Ticker', ['pair=XBTUSD']);
-	my $parsed = parse_json( $res, 'kraken' );
-
-	#print Dumper($parsed);
-	my $btcusd = $parsed->{result}->{XXBTZUSD};
-	if (!defined($btcusd)) {
-		print "Oops, btcusd not found\n";
-		return;
+	if (!defined($opt_a)) {
+		$opt_a = "ticker";
 	}
-	my $bid = $btcusd->{b}[0];
-	my $ask = $btcusd->{a}[0];
-	my $avg = ($bid+$ask)/2;
-	if ($opt_q > 0) {
-		print $avg;
-		return;
+
+	if ($opt_a eq "ticker") {
+
+		status("Kraken spot price");
+
+		my $res = $kraken->call(Public, 'Ticker', ['pair=XBTUSD']);
+		my $parsed = parse_json( $res, 'kraken' );
+
+		#print Dumper($parsed);
+		my $btc = $parsed->{result}->{XXBTZUSD};
+		if (!defined($btc)) {
+			print "Oops, btc not found\n";
+			return;
+		}
+		my $bid = $btc->{b}[0];
+		my $ask = $btc->{a}[0];
+		my $avg = ($bid+$ask)/2;
+		if ($opt_q > 0) {
+			print $avg;
+			return;
+		}
+		printf "Bid %s\nAsk %s\n", $bid, $ask;
+		printf "Avg %s\n", $avg;
+		printf "Low %s %s (today 24hrs)\n", $btc->{l}[0], $btc->{l}[1];
+		printf "Hi  %s %s (today 24hrs)\n", $btc->{h}[0], $btc->{h}[1];
+		printf "Vol %s %s (today 24hrs)\n", $btc->{v}[0], $btc->{v}[1];
+		printf "Wav %s %s (today 24hrs)\n", $btc->{p}[0], $btc->{p}[1];
+		printf "Lst %s %s (price volume)\n", $btc->{c}[0], $btc->{c}[1];
 	}
-	printf "Bid %s\nAsk %s\n", $bid, $ask;
-	printf "Avg %s\n", $avg;
-	printf "Low %s %s (today 24hrs)\n", $btcusd->{l}[0], $btcusd->{l}[1];
-	printf "Hi  %s %s (today 24hrs)\n", $btcusd->{h}[0], $btcusd->{h}[1];
-	printf "Vol %s %s (today 24hrs)\n", $btcusd->{v}[0], $btcusd->{v}[1];
-	printf "Wav %s %s (today 24hrs)\n", $btcusd->{p}[0], $btcusd->{p}[1];
-	printf "Lst %s %s (price volume)\n", $btcusd->{c}[0], $btcusd->{c}[1];
-	#if ($opt_q > 0) {
-	#	print $price;
-	#	return;
-	#}
-	#printf "Current bitcoin price in %s: %s\n", "USD", $price;
+	if ($opt_a eq "assets") {
+		my $res = $kraken->call(Public, 'Assets');
+		my $parsed = parse_json( $res, 'kraken' );
+		foreach my $asset (sort keys %{$parsed->{result}}) {
+			my $r = $parsed->{result}->{$asset};
+			printf "%4s %4s %8s %2d %2d\n", $asset, $r->{altname},
+			    $r->{aclass}, $r->{decimals},
+			    $r->{display_decimals};
+		}
+		#print Dumper($parsed);
+	}
+	if ($opt_a eq "assetpairs") {
+		my $res = $kraken->call(Public, 'AssetPairs');
+		my $parsed = parse_json( $res, 'kraken' );
+		foreach my $pair (sort keys %{$parsed->{result}}) {
+			my $r = $parsed->{result}->{$pair};
+			printf "%11s %11s %8s %4s %4s\n", $pair, $r->{altname},
+			    $r->{aclass_base}, $r->{base}, $r->{quote};
+		}
+		#print Dumper($parsed);
+	}
+		
 }
 
 sub kraken_setup {
