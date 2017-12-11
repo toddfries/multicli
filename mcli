@@ -27,7 +27,9 @@ STDERR->autoflush(1);
 STDOUT->autoflush(1);
 
 our $opt_p;
-getopt('p:');
+our $opt_q = 0;
+our $opt_v = 0;
+getopt('p:q:v');
 
 if (!defined($opt_p)) {
 	$opt_p = "all";
@@ -64,6 +66,10 @@ if ($opt_p eq "coinbase") {
 	coinbase();
 }
 
+if ($opt_p eq "kraken") {
+	kraken();
+}
+
 if (0) {
 use Finance::BlockIO;
 
@@ -75,6 +81,9 @@ print "BlockIO price ret: ",$ret,"\n";
 
 sub status {
 	my ($str) = @_;
+	if ($opt_q > 0) {
+		return;
+	}
 
 	print "\n==> $str status\n";
 }
@@ -120,6 +129,10 @@ sub coinbase {
 
 	my ($res) = $coinbase->get_spot_price("USD");
 	my $price = $res->{data}->{amount};
+	if ($opt_q > 0) {
+		print $price;
+		return;
+	}
 	printf "Current bitcoin price in %s: %s\n", "USD", $price;
 
 	my @resp = $coinbase->get_accounts();
@@ -184,6 +197,55 @@ sub coinbase_order_accts {
 	return $a->{name} cmp $b->{name};
 }
 
+sub kraken {
+	use Finance::Bank::Kraken;
+	if (!defined($mcli->{kraken})) {
+		$mcli->{kraken} = kraken_setup();
+	}
+	my $kraken = $mcli->{kraken};
+
+	status("Kraken spot price");
+
+	my $res = $kraken->call(Public, 'Ticker', ['pair=XBTUSD']);
+	my $parsed = parse_json( $res, 'kraken' );
+
+	#print Dumper($parsed);
+	my $btcusd = $parsed->{result}->{XXBTZUSD};
+	if (!defined($btcusd)) {
+		print "Oops, btcusd not found\n";
+		return;
+	}
+	my $bid = $btcusd->{b}[0];
+	my $ask = $btcusd->{a}[0];
+	my $avg = ($bid+$ask)/2;
+	if ($opt_q > 0) {
+		print $avg;
+		return;
+	}
+	printf "Bid %s\nAsk %s\n", $bid, $ask;
+	printf "Avg %s\n", ($bid+$ask)/2;
+	printf "Low %s %s (today 24hrs)\n", $btcusd->{l}[0], $btcusd->{l}[1];
+	printf "Hi  %s %s (today 24hrs)\n", $btcusd->{h}[0], $btcusd->{h}[1];
+	printf "Vol %s %s (today 24hrs)\n", $btcusd->{v}[0], $btcusd->{v}[1];
+	printf "Wav %s %s (today 24hrs)\n", $btcusd->{p}[0], $btcusd->{p}[1];
+	printf "Lst %s %s (price volume)\n", $btcusd->{c}[0], $btcusd->{c}[1];
+	#if ($opt_q > 0) {
+	#	print $price;
+	#	return;
+	#}
+	#printf "Current bitcoin price in %s: %s\n", "USD", $price;
+}
+
+sub kraken_setup {
+	use Finance::Bank::Kraken;
+	use JSON;
+	if (!defined($mcli->{JSON})) {
+		$mcli->{JSON} = JSON->new->allow_nonref;
+	}
+
+	my $kraken = Finance::Bank::Kraken->new;
+	return $kraken;
+}
 
 sub namecheap {
 	if (!defined($mcli->{namecheap})) {
@@ -365,4 +427,21 @@ sub c1360_setup {
 	$mcli->{c1360_url} = $url;
 	$mcli->{c1360_fid} = $fid;
 	return $ofx;
+}
+
+sub parse_json {
+	my ($str,$name) = @_;
+
+	my $parsed;
+	eval {
+		$parsed = $mcli->{JSON}->decode( $str );
+	};
+	if ($@) {
+		die("%s: json->decode('%s') Error %s\n", $name, $str, $@);
+		return undef;
+	}
+	if ($opt_v > 0) {
+		printf "Pretty %s: %s\n", $name, $mcli->{JSON}->pretty->encode( $parsed )."\n";;
+	}
+	return $parsed;
 }
