@@ -1,0 +1,6 @@
+See if one of:
+
+http://search.cpan.org/~whinds/Bitcoin-RPC-Client-0.07/lib/Bitcoin/RPC/Client.pm
+http://search.cpan.org/~tobyink/Finance-Bitcoin-0.902/lib/Finance/Bitcoin/API.pm
+
+can work as a perl native btcctl replacement..
