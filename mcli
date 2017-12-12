@@ -21,6 +21,7 @@ use Config::Tiny;
 use Date::Manip;
 use Getopt::Std;
 use Data::Dumper;
+use POSIX qw(strftime);
 use ReadConf;
 
 STDERR->autoflush(1);
@@ -73,6 +74,9 @@ if ($opt_p eq "kraken") {
 }
 if ($opt_p eq "bitstamp") {
 	bitstamp();
+}
+if ($opt_p eq "bci") {
+	bci();
 }
 
 if (0) {
@@ -313,6 +317,41 @@ sub bitstamp_setup {
 
 	my $bitstamp = Finance::BitStamp::API->new;
 	return $bitstamp;
+}
+
+sub bci {
+	if (!defined($mcli->{bci})) {
+		$mcli->{bci} = bci_setup();
+	}
+	my $bci = $mcli->{bci};
+	$bci->ua->agent("OpenBSD ftp");
+
+	status("BlockChain.info lastblock");
+
+	my $res = $bci->latestblock;
+
+	my $hash = $res->{hash};
+	my @txi = @{$res->{txIndexes}};
+	my $block_index = $res->{block_index};
+	my $time = $res->{time};
+	my $height = $res->{height};
+	if ($opt_q > 0) {
+		print $height;
+		return;
+	}
+	printf "%s %d %s\n", strftime("%Y%m%d %H:%M:%S",localtime($time)),
+	    $height, $hash;
+}
+
+sub bci_setup {
+	use WebService::BlockChain::Info;
+	use JSON;
+	if (!defined($mcli->{JSON})) {
+		$mcli->{JSON} = JSON->new->allow_nonref;
+	}
+
+	my $bci = WebService::BlockChain::Info->new;
+	return $bci;
 }
 
 sub namecheap {
