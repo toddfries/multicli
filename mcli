@@ -78,6 +78,9 @@ if ($opt_p eq "bitstamp") {
 if ($opt_p eq "bci") {
 	bci();
 }
+if ($opt_p eq "bw") {
+	bw();
+}
 
 if (0) {
 use Finance::BlockIO;
@@ -352,6 +355,37 @@ sub bci_setup {
 
 	my $bci = WebService::BlockChain::Info->new;
 	return $bci;
+}
+sub bw {
+	if (!defined($mcli->{bw})) {
+		$mcli->{bw} = bw_setup();
+	}
+	my $bw = $mcli->{bw};
+	$bw->ua->agent("OpenBSD ftp");
+
+	status("bw.com account info");
+
+	my $res = $bw->account;
+	print Dumper($res);
+}
+
+sub bw_setup {
+	use WebService::BW;
+	use JSON;
+	if (!defined($mcli->{JSON})) {
+		$mcli->{JSON} = JSON->new->allow_nonref;
+	}
+
+	my $conf = $ENV{'HOME'}."/.bw.conf";
+	my $config = $r->readconf($conf)->{_};
+	my $key = $config->{key};
+	my $sec = $config->{sec};
+	my $user = $config->{user};
+
+	my $bw = WebService::BW->new( api_key => $key, api_secret => $sec,
+		userName => $user );
+
+	return $bw;
 }
 
 sub namecheap {
