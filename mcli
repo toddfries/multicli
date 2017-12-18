@@ -81,6 +81,9 @@ if ($opt_p eq "bci") {
 if ($opt_p eq "bw") {
 	bw();
 }
+if ($opt_p eq "btcusd") {
+	btcusd();
+}
 
 if (0) {
 use Finance::BlockIO;
@@ -500,9 +503,6 @@ sub c1360 {
 		exit(1);
 	}
 	print "Seems ok so far:\n";
-	#print recurse_dump($ofx->response->ofx_header());
-	#print "Response:\n";
-	#print recurse_dump($ofx->response);
 	my $status = $ofx->response->signon_status_code( $fi );
 	printf "Signon status code: %s\n", defined($status) ? $status : "<undef>";
 
@@ -530,12 +530,42 @@ sub c1360 {
 			FID => $fid
 		);
 		my $now = time();
-		my $r = $ofx->{ua}->statement($acct_obj, start=> $now, end=> $now);
+		my $start = $now - 90*3600*24;
+		my $r = $ofx->{ua}->statement($acct_obj, start=> $start, end=> $now, transactions => 'Y');
+		if (! $r->is_success) {
+			print "Failure???\n";
+		}
+		if ($r->signon_status_code) {
+			print "Status code ??\n";
+		}
 		my $trans = $r->ofx->{bankmsgsrsv1}{stmttrnrs};
 		my $availbal = $trans->{stmtrs}->{availbal}->{balamt};
 		my $ledgerbal = $trans->{stmtrs}->{ledgerbal}->{balamt};
 		printf $afmt, $id, $availbal, $ledgerbal, $type, $desc;
 		$totalbalance += $ledgerbal;
+		my $ofxres = $r->ofx;
+		if (! $ofxres->{bankmsgsrsv1}{stmttrnrs}{stmtrs}) {
+			print "No transactions\n";
+			next;
+		}
+		my $transaction = $ofxres->{bankmsgsrsv1}{stmttrnrs};
+		if (Finance::OFX::transactionStatusCode($transaction)) {
+			print "Statement request error: ".($transaction->{status}{message})."\n";
+			next;
+		}
+		#print Dumper($transaction);
+		my $txlist = $transaction->{stmtrs}{banktranlist};
+		if (!defined($txlist)) {
+			next;
+		}
+		#print Dumper($txlist);
+		my @txs = @{$txlist->{stmttrn}};
+		foreach my $tx (sort { $a->{dtposted} <=> $b->{dtposted} } @txs) {
+			#printf "      tx is a %s\n", ref($tx);
+			#next;
+			my $date = strftime("%Y%m%d %H:%M:%S",localtime($tx->{dtposted}));
+			printf "      %4d %s %9.2f %s\n", $tx->{fitid}, $date, $tx->{trnamt}, $tx->{name};
+		}
 	}
 	printf $afmt, 0, 0.0, $totalbalance, "", "Total";
 }
@@ -585,4 +615,42 @@ sub parse_json {
 		printf "Pretty %s: %s\n", $name, $mcli->{JSON}->pretty->encode( $parsed )."\n";;
 	}
 	return $parsed;
+}
+
+sub btcusd {
+	if (!defined($mcli->{coinbase})) {
+		$mcli->{coinbase} = coinbase_setup();
+	}
+	my $coinbase = $mcli->{coinbase};
+	my ($res) = $coinbase->get_spot_price("USD");
+	my $cbavg = $res->{data}->{amount};
+
+	if (!defined($mcli->{bitstamp})) {
+		$mcli->{bitstamp} = bitstamp_setup();
+	}
+	my $bitstamp = $mcli->{bitstamp};
+	$res = $bitstamp->ticker;
+	my $bid = $res->{bid};
+	my $ask = $res->{ask};
+	my $bsavg = ($bid+$ask)/2;
+
+	use Finance::Bank::Kraken;
+	if (!defined($mcli->{kraken})) {
+		$mcli->{kraken} = kraken_setup();
+	}
+	my $kraken = $mcli->{kraken};
+	$res = $kraken->call(Public, 'Ticker', ['pair=XBTUSD']);
+	my $parsed = parse_json( $res, 'kraken' );
+
+	my $btc = $parsed->{result}->{XXBTZUSD};
+	if (!defined($btc)) {
+		print "Oops, btc not found\n";
+		return;
+	}
+	$bid = $btc->{b}[0];
+	$ask = $btc->{a}[0];
+	my $kravg = ($bid+$ask)/2;
+
+	my $avg = ($kravg+$bsavg+$cbavg)/3;
+	printf "%0.2f",$avg;
 }
