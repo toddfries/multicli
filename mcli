@@ -651,6 +651,37 @@ sub btcusd {
 	$ask = $btc->{a}[0];
 	my $kravg = ($bid+$ask)/2;
 
-	my $avg = ($kravg+$bsavg+$cbavg)/3;
+	my @vals;
+	if (defined($kravg) && $kravg > 0.0) {
+		if ($opt_q < 1) {
+			printf "Kraken   %0.3f\n", $kravg;
+		}
+		push @vals, $kravg;
+	}
+	if (defined($bsavg) && $bsavg > 0.0) {
+		if ($opt_q < 1) {
+			printf "Bitstamp %0.3f\n", $bsavg;
+		}
+		push @vals, $bsavg;
+	}
+	if (defined($cbavg) && $cbavg > 0.0) {
+		if ($opt_q < 1) {
+			printf "Coinbase %0.3f\n", $cbavg;
+		}
+		push @vals, $cbavg;
+	}
+	my $avg = 0.0;
+	my $act = 0;
+	foreach my $a (@vals) {
+		$avg += $a;
+		$act ++;
+	}
+	$avg = $avg/$act;
+	if ($opt_q < 1) {
+		print "Average  ";
+	}
 	printf "%0.2f",$avg;
+	if ($opt_q < 1) {
+		print "\n";
+	}
 }
