@@ -85,6 +85,10 @@ if ($opt_p eq "btcusd") {
 	btcusd();
 }
 
+if ($opt_p eq "weather") {
+	weather();
+}
+
 if (0) {
 use Finance::BlockIO;
 
@@ -436,6 +440,42 @@ sub namecheap_setup {
 		DefaultIp => $nconfig->{'defaultip'},
 	);
 	return $namecheap;
+}
+
+sub weather {
+	if (!defined($mcli->{weather})) {
+		$mcli->{weather} = weather_setup();
+	}
+
+	my $weather = $mcli->{weather};
+
+	printf "Temp    %s F\n", $weather->temp_f;
+	printf "Sunrise %02d:%02d\n", $weather->astronomy->sunrise->hour,
+		$weather->astronomy->sunrise->minute;
+	printf "Sunset  %02d:%02d\n", $weather->astronomy->sunset->hour,
+		$weather->astronomy->sunset->minute;
+}
+
+sub weather_setup {
+	use WWW::Wunderground::API;
+	use Cache::FileCache;
+
+	my $wconfig = $r->readconf($ENV{'HOME'}."/.weather.conf")->{_};
+	if (!defined($wconfig->{api_key})) {
+		print "api_key is not defined, bailing for now\n";
+		return undef;
+	}
+	my $wu = WWW::Wunderground::API->new(
+		location => $wconfig->{location},
+		api_key => $wconfig->{api_key},
+		auto_api => 1,
+		cache => Cache::FileCache->new({
+			namespace => 'weathercache',
+			default_expires_in => 2400,
+		}),
+	);
+
+	return $wu;
 }
 
 sub voipms {
