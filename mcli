@@ -30,9 +30,10 @@ STDOUT->autoflush(1);
 our $opt_a;
 our $opt_p;
 our $opt_q = 0;
+our $opt_t;    # bci/rawtx txid
 our $opt_v = 0;
 
-getopt('a:p:q:v');
+getopt('a:p:q:t:v');
 
 if (!defined($opt_p)) {
 	$opt_p = "all";
@@ -336,6 +337,12 @@ sub bci {
 	my $bci = $mcli->{bci};
 	$bci->ua->agent("OpenBSD ftp");
 
+	if ($opt_a eq "rawtx" && defined($opt_t)) {
+		my $rawtx = $bci->rawtx($opt_t);
+		print Dumper($rawtx);
+		return;
+	}
+		
 	status("BlockChain.info lastblock");
 
 	my $res = $bci->latestblock;
@@ -449,11 +456,59 @@ sub weather {
 
 	my $weather = $mcli->{weather};
 
-	printf "Temp    %s F\n", $weather->temp_f;
-	printf "Sunrise %02d:%02d\n", $weather->astronomy->sunrise->hour,
-		$weather->astronomy->sunrise->minute;
-	printf "Sunset  %02d:%02d\n", $weather->astronomy->sunset->hour,
-		$weather->astronomy->sunset->minute;
+	my $astro = $weather->astronomy;
+	my $sunrise = $astro->sunrise;
+	if (defined($astro) && defined($sunrise)) {
+		
+		#print Dumper($astro);
+		my $rs = "%02d:%02d->%02d:%02d";
+		printf "Sun/Moon rise->set $rs / $rs\n",
+			$sunrise->hour, $sunrise->minute,
+			$astro->sunset->hour, $astro->sunset->minute,
+			$astro->moonrise->hour, $astro->moonrise->minute,
+			$astro->moonset->hour, $astro->moonset->minute;
+	}
+
+	my $forecast = $weather->forecast;
+	#print Dumper($forecast);
+
+	printf("Temp(F) %s :", $weather->temp_f);
+	my @hourly = @{ $weather->hourly };
+	my ($topline,$infline);
+	$topline = "";
+	$infline = sprintf("%14s"," ");
+	my $hcount = 0;
+	foreach my $r (@hourly) {
+		$topline .= sprintf(" %02d", $r->{FCTTIME}{hour_padded});
+		$infline .= sprintf(" %02d", $r->{temp}{english});
+		if ($hcount++ > 11) {
+			$hcount = 0;
+			print $topline."\n";
+			print $infline."\n\n";
+			$infline = $topline = sprintf("%14s"," ");
+		}
+	}
+	#print " Hi/Low ";
+	#foreach my $day (@{$forecast->{simpleforecast}->{forecastday}}) {
+	#	printf "%s/%s ",
+	#	    $day->{high}->{fahrenheit},
+	#	    $day->{low}->{fahrenheit};
+	#}
+	print "\n";
+
+	my $forecast10 = $weather->forecast10day;
+	#print Dumper($forecast10);
+
+	foreach my $day (@{$forecast10->{simpleforecast}->{forecastday}}) {
+		printf "%3s %2s, %4s %3d/%3d %8i  %-s\n",
+			$day->{date}->{monthname_short},
+			$day->{date}->{day},
+			$day->{date}->{year},
+			$day->{high}->{fahrenheit},
+			$day->{low}->{fahrenheit},
+			$day->{pop},
+			$day->{conditions};
+	}
 }
 
 sub weather_setup {
