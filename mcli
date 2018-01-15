@@ -455,18 +455,35 @@ sub weather {
 	}
 
 	my $weather = $mcli->{weather};
-
+	
+	#while (1) {
 	my $astro = $weather->astronomy;
 	my $sunrise = $astro->sunrise;
-	if (defined($astro) && defined($sunrise)) {
+	my $sunset = $astro->sunset;
+	my $moonrise = $astro->moonrise;
+	my $moonset = $astro->moonset;
+	if (defined($astro)
+	    && defined($sunrise) && defined($sunset)
+	    && defined($moonrise) && defined($moonset)
+	) {
 		
 		#print Dumper($astro);
 		my $rs = "%02d:%02d->%02d:%02d";
 		printf "Sun/Moon rise->set $rs / $rs\n",
 			$sunrise->hour, $sunrise->minute,
-			$astro->sunset->hour, $astro->sunset->minute,
-			$astro->moonrise->hour, $astro->moonrise->minute,
-			$astro->moonset->hour, $astro->moonset->minute;
+			$sunset->hour, $sunset->minute,
+			$moonrise->hour, $moonrise->minute,
+			$moonset->hour, $moonset->minute;
+		#last;
+	} else {
+		if (!defined($sunrise)) { $sunrise = "<undef>"; }
+		if (!defined($sunset)) { $sunset = "<undef>"; }
+		if (!defined($moonrise)) { $moonrise = "<undef>"; }
+		if (!defined($moonset)) { $moonset = "<undef>"; }
+		if (!defined($astro)) { $astro = "<undef>"; }
+		printf "astro %s { sunrise = %s, sunset = %s, moonrise = %s, ".
+		    "moonset = %s\n", $astro, $sunrise, $sunset, $moonrise,
+		    $moonset;
 	}
 
 	my $forecast = $weather->forecast;
