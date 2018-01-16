@@ -32,8 +32,9 @@ our $opt_p;
 our $opt_q = 0;
 our $opt_t;    # bci/rawtx txid
 our $opt_v = 0;
+our $opt_c; # config file, if desired to over-ride
 
-getopt('a:p:q:t:v');
+getopt('a:c:p:q:t:v');
 
 if (!defined($opt_p)) {
 	$opt_p = "all";
@@ -453,57 +454,80 @@ sub weather {
 	if (!defined($mcli->{weather})) {
 		$mcli->{weather} = weather_setup();
 	}
+	#use Temperature::Windchill qw{ windchill_us };
 
 	my $weather = $mcli->{weather};
 	
-	#while (1) {
 	my $astro = $weather->astronomy;
-	my $sunrise = $astro->sunrise;
-	my $sunset = $astro->sunset;
-	my $moonrise = $astro->moonrise;
-	my $moonset = $astro->moonset;
-	if (defined($astro)
-	    && defined($sunrise) && defined($sunset)
-	    && defined($moonrise) && defined($moonset)
-	) {
-		
-		#print Dumper($astro);
-		my $rs = "%02d:%02d->%02d:%02d";
-		printf "Sun/Moon rise->set $rs / $rs\n",
-			$sunrise->hour, $sunrise->minute,
-			$sunset->hour, $sunset->minute,
-			$moonrise->hour, $moonrise->minute,
-			$moonset->hour, $moonset->minute;
-		#last;
+	my $times = { };
+	if (defined($astro)) {
+		foreach my $sm (("sun","moon")) {
+			foreach my $rs (("rise","set")) {
+				my $time;
+				my $op = ${sm}.${rs};
+				eval {
+			    		$time = $astro->$op;
+				};
+				if ($@) {
+					print "Hmm: $@\n";
+				}
+				if (defined($time)) {
+					$times->{$sm}->{$rs} =
+					    sprintf("%02d:%02d",
+					    $time->hour, $time->minute);
+				} else {
+					$times->{$sm}->{$rs} = "undef";
+				}
+			}
+		}
+
+		printf("Sun/Moon rise->set %s->%s / %s->%s\n",
+			$times->{sun}->{rise}, $times->{sun}->{set},
+			$times->{moon}->{rise}, $times->{moon}->{set},
+		);
 	} else {
-		if (!defined($sunrise)) { $sunrise = "<undef>"; }
-		if (!defined($sunset)) { $sunset = "<undef>"; }
-		if (!defined($moonrise)) { $moonrise = "<undef>"; }
-		if (!defined($moonset)) { $moonset = "<undef>"; }
-		if (!defined($astro)) { $astro = "<undef>"; }
 		printf "astro %s { sunrise = %s, sunset = %s, moonrise = %s, ".
-		    "moonset = %s\n", $astro, $sunrise, $sunset, $moonrise,
-		    $moonset;
+		    "moonset = %s}\n", $astro, $astro->sunrise, $astro->sunset,
+		    $astro->moonrise, $astro->moonset;
 	}
 
 	my $forecast = $weather->forecast;
 	#print Dumper($forecast);
 
-	printf("Temp(F) %s :", $weather->temp_f);
+	printf("Temp(F) %4.1f :", $weather->temp_f);
 	my @hourly = @{ $weather->hourly };
-	my ($topline,$infline);
+	my ($topline,$infline,$feeline,$spdline);
 	$topline = "";
-	$infline = sprintf("%14s"," ");
+	$infline = sprintf("%14s","Temp(F)");
+	$spdline = sprintf("%14s","WindSpeed");
+	$feeline = sprintf("%14s","WindChill");
 	my $hcount = 0;
+	my $lastr;
 	foreach my $r (@hourly) {
-		$topline .= sprintf(" %02d", $r->{FCTTIME}{hour_padded});
-		$infline .= sprintf(" %02d", $r->{temp}{english});
+		$topline .= sprintf(" %3d", $r->{FCTTIME}{hour_padded});
+		$infline .= sprintf(" %3d", $r->{temp}{english});
+		my $wch = $r->{windchill}{english};
+		if ($wch == -9999) {
+			$wch = $r->{feelslike}{english};
+			if ($wch == -9999) {
+				$wch = $r->{heatindex}{english};
+			}
+		}
+		$feeline .= sprintf(" %3d", $wch);
+		$spdline .= sprintf(" %3d", $r->{wspd}{english});
 		if ($hcount++ > 11) {
 			$hcount = 0;
 			print $topline."\n";
-			print $infline."\n\n";
-			$infline = $topline = sprintf("%14s"," ");
+			print $infline."\n";
+			print $spdline."\n";
+			print $feeline."\n";
+			print "\n";
+			$topline = sprintf("%14s","Hour");
+			$infline = sprintf("%14s","Temp(F)");
+			$spdline = sprintf("%14s","WindSpeed");
+			$feeline = sprintf("%14s","WindChill");
 		}
+		$lastr = $r;
 	}
 	#print " Hi/Low ";
 	#foreach my $day (@{$forecast->{simpleforecast}->{forecastday}}) {
@@ -512,34 +536,87 @@ sub weather {
 	#	    $day->{low}->{fahrenheit};
 	#}
 	print "\n";
+	#if ($lastr->{windchill}{english} == -9999) {
+	#	print Dumper($lastr);
+	#}
 
 	my $forecast10 = $weather->forecast10day;
+	my $lastday;
 	#print Dumper($forecast10);
-
+	#     "Jan 16, 2018   21/  10 20/ 8   11/  -8    0 Clear"
+	print "                Temp    Wind RealFeel  Pct.\n";
+	print "    Date       Hi/  Lo Hi/Lo  Hi/ Lo Precip. Conditions\n";
 	foreach my $day (@{$forecast10->{simpleforecast}->{forecastday}}) {
-		printf "%3s %2s, %4s %3d/%3d %8i  %-s\n",
+		my $maxwind = $day->{maxwind}->{mph};
+		my $avgwind = $day->{avewind}->{mph};
+		my $lowwind = ( $avgwind * 2 ) - $maxwind;
+		my $high = $day->{high}->{fahrenheit};
+		my $low = $day->{low}->{fahrenheit};
+		my $wchi = windchill_us( $high, $lowwind );
+		my $wclo = windchill_us( $low, $maxwind );
+		printf "%3s %2s, %4s %4d/%4d %2d/%2d %4d/%4d %4i %-s\n",
 			$day->{date}->{monthname_short},
 			$day->{date}->{day},
 			$day->{date}->{year},
-			$day->{high}->{fahrenheit},
-			$day->{low}->{fahrenheit},
+			$high, $low,
+			$maxwind, $lowwind,
+			$wchi, $wclo,
 			$day->{pop},
 			$day->{conditions};
+		$lastday = $day;
 	}
+	#print Dumper($lastday);
+	print Dumper($weather->data);
+}
+
+sub windchill_us {
+	my ($temp, $ws) = @_;
+	if (!defined($temp) || !defined($ws)) {
+		return $temp;
+	}
+	if ($ws < 3) {
+		return $temp;
+	}
+	if ($temp > 50 || $temp < -50) {
+		return $temp;
+	}
+	my $pow = $ws ** 0.16;
+	my $wc = 35.74 + (0.6215 * $temp) - (35.75 * $pow) + (0.4275 * $temp * $pow);
+	return $wc;
 }
 
 sub weather_setup {
 	use WWW::Wunderground::API;
 	use Cache::FileCache;
 
-	my $wconfig = $r->readconf($ENV{'HOME'}."/.weather.conf")->{_};
-	if (!defined($wconfig->{api_key})) {
-		print "api_key is not defined, bailing for now\n";
+	my $conf = $opt_c;
+	if (!defined($conf)) {
+		$conf = $ENV{'HOME'}."/.weather.conf";
+	}
+
+	my ($apikey, $location);
+	my $allconf = $r->readconf($conf);
+	if (defined($opt_a) && defined($allconf->{$opt_a})) {
+		$location = $allconf->{$opt_a}->{location};
+		$apikey = $allconf->{$opt_a}->{api_key};
+	}
+	if (!defined($apikey)) {
+		$apikey = $allconf->{_}->{api_key};
+	}
+	if (!defined($location)) {
+		$location = $allconf->{_}->{location};
+	}
+	if (!defined($apikey)) {
+		print "api_key is not defined, bailing\n";
+		return undef;
+	}
+	if (!defined($location)) {
+		print "location is not defined, bailing\n";
 		return undef;
 	}
 	my $wu = WWW::Wunderground::API->new(
-		location => $wconfig->{location},
-		api_key => $wconfig->{api_key},
+		location => $location,
+		api_key => $apikey,
 		auto_api => 1,
 		cache => Cache::FileCache->new({
 			namespace => 'weathercache',
