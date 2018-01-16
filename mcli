@@ -566,7 +566,7 @@ sub weather {
 		$lastday = $day;
 	}
 	#print Dumper($lastday);
-	print Dumper($weather->data);
+	#print Dumper($weather->data);
 }
 
 sub windchill_us {
