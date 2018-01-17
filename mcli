@@ -451,6 +451,23 @@ sub namecheap_setup {
 	return $namecheap;
 }
 
+sub weather_history {
+	my ($weather, $date) = @_;
+
+	my $history = $weather->api_call("history_${date}");
+	my $sum = $history->{dailysummary};
+	foreach my $e (@$sum) {
+		printf "%s %3d/%3d\n", $history->{date}{pretty},
+		    $$e{maxtempi}, $$e{mintempi};
+	}
+	foreach my $o (@{$history->{observations}}) {
+		printf "%s %4.2f\n", $$o{date}{pretty},
+		    $$o{tempi};
+	}
+	#print Dumper($history);
+	return;
+}
+
 sub weather {
 	if (!defined($mcli->{weather})) {
 		$mcli->{weather} = weather_setup();
@@ -460,8 +477,7 @@ sub weather {
 	my $weather = $mcli->{weather};
 
 	if (defined($opt_H)) {
-		my $history = $weather->api_call("history_${opt_H}");
-		print Dumper($history);
+		weather_history($weather, $opt_H);
 		return;
 	}
 	
