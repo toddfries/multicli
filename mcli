@@ -451,17 +451,23 @@ sub namecheap_setup {
 	return $namecheap;
 }
 
+sub weather_timefmt {
+	my ($str) = @_;
+	return strftime("%Y%m%d %H:%M:%S",localtime(UnixDate(ParseDate($str),"%s")));
+}
+
 sub weather_history {
 	my ($weather, $date) = @_;
 
 	my $history = $weather->api_call("history_${date}");
 	my $sum = $history->{dailysummary};
 	foreach my $e (@$sum) {
-		printf "%s %3d/%3d\n", $history->{date}{pretty},
+		printf "%s %3d/%3d\n",
+		    weather_timefmt($history->{date}{pretty}),
 		    $$e{maxtempi}, $$e{mintempi};
 	}
 	foreach my $o (@{$history->{observations}}) {
-		printf "%s %4.2f\n", $$o{date}{pretty},
+		printf "%s %4.2f\n", weather_timefmt($$o{date}{pretty}),
 		    $$o{tempi};
 	}
 	#print Dumper($history);
@@ -707,9 +713,13 @@ sub c1360 {
 		printf "Something went wrong: %s\n", $ofx->response;
 		exit(1);
 	}
-	print "Seems ok so far:\n";
+	#print "Seems ok so far:\n";
 	my $status = $ofx->response->signon_status_code( $fi );
-	printf "Signon status code: %s\n", defined($status) ? $status : "<undef>";
+	if (defined($status)) {
+		if ($status != 0) {
+			printf "Signon status code: %s\n", $status;
+		}
+	}
 
 	# 1179955919 150002.02 140002.02 CHECKING ING Medical Fund
 	print "    Account Available    Ledger\n";
@@ -736,6 +746,10 @@ sub c1360 {
 		);
 		my $now = time();
 		my $start = $now - 90*3600*24;
+		my $txyn = 'Y';
+		if ($opt_q == 1) {
+			$txyn = 'N';
+		}
 		my $r = $ofx->{ua}->statement($acct_obj, start=> $start, end=> $now, transactions => 'Y');
 		if (! $r->is_success) {
 			print "Failure???\n";
@@ -748,6 +762,11 @@ sub c1360 {
 		my $ledgerbal = $trans->{stmtrs}->{ledgerbal}->{balamt};
 		printf $afmt, $id, $availbal, $ledgerbal, $type, $desc;
 		$totalbalance += $ledgerbal;
+
+		# skip tx bits if quiet is asked for
+		if ($opt_q == 1) {
+			next;
+		}
 		my $ofxres = $r->ofx;
 		if (! $ofxres->{bankmsgsrsv1}{stmttrnrs}{stmtrs}) {
 			print "No transactions\n";
@@ -764,15 +783,27 @@ sub c1360 {
 			next;
 		}
 		#print Dumper($txlist);
+		if (ref($txlist->{stmttrn}) eq "HASH") {
+			c1360_fmt_tx($txlist->{stmttrn});
+			next;
+		}
+		if (ref($txlist->{stmttrn}) ne "ARRAY") {
+			printf "txlist->{stmttrn} is a %s\n", ref($txlist->{stmttrn});
+			print Dumper($txlist->{stmttrn});
+			next;
+		}
 		my @txs = @{$txlist->{stmttrn}};
 		foreach my $tx (sort { $a->{dtposted} <=> $b->{dtposted} } @txs) {
-			#printf "      tx is a %s\n", ref($tx);
-			#next;
-			my $date = strftime("%Y%m%d %H:%M:%S",localtime($tx->{dtposted}));
-			printf "      %4d %s %9.2f %s\n", $tx->{fitid}, $date, $tx->{trnamt}, $tx->{name};
+			c1360_fmt_tx($tx);
 		}
 	}
 	printf $afmt, 0, 0.0, $totalbalance, "", "Total";
+}
+
+sub c1360_fmt_tx {
+	my ($tx) = @_;
+	my $date = strftime("%Y%m%d %H:%M:%S",localtime($tx->{dtposted}));
+	printf "      %4d %s %9.2f %s\n", $tx->{fitid}, $date, $tx->{trnamt}, $tx->{name};
 }
 
 sub c1360_setup {
