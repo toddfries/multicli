@@ -34,8 +34,9 @@ our $opt_t;    # bci/rawtx txid
 our $opt_v = 0;
 our $opt_c; # config file, if desired to over-ride
 our $opt_H; # historic date for weather
+our $opt_D;
 
-getopt('a:c:p:q:t:vH:');
+getopt('a:c:p:q:t:vH:D:');
 
 if (!defined($opt_p)) {
 	$opt_p = "all";
@@ -127,6 +128,52 @@ sub hetzner {
 			$s->get('server_name'),
 			$s->get('paid_until');
 	}
+
+	status("Server Market");
+	my $call = "order/server_market/product";
+	$call .= "?search=Ent";
+	$call .= "&min_cpu_benchmark=5681";
+	$call .= "&min_memory_size=47";
+	my $parsed = $hetzner->get($call);
+	my $winner;
+	if (!defined($opt_D)) {
+		$opt_D = 0;
+	}
+	foreach my $server ( @{$parsed} ) {
+		my $prod = $server->{product};
+		my $disk =  $prod->{hdd_count} * $prod->{hdd_size};
+		if ($disk < $opt_D) {
+			next;
+		}
+		if (!defined($winner)) {
+			$winner = $server;
+			next;
+		}
+		my $winprod = $winner->{product};
+		if ($prod->{price} < $winprod->{price}) {
+			next;
+		}
+		if ($prod->{price} == $winprod->{price}) {
+			if ($prod->{memory_size} > $winprod->{memory_size}) {
+				$winner = $server;
+				next;
+			}
+			my $windisk = $winner->{hdd_count} * $winner->{hdd_size};
+			if ($disk > $windisk) {
+				$winner = $server;
+				next;
+			}
+			if ($prod->{cpu_benchmark} > $winner->{cpu_benchmark}) {
+				$winner = $server;
+				next;
+			}
+		}
+	}
+
+	printf "%7s. %5s %dGB RAM, %dx%dGB disk %5.2f EUR\n", $winner->{product}->{id},
+	    $winner->{product}->{name}, $winner->{product}->{memory_size},
+	    $winner->{product}->{hdd_count}, $winner->{product}->{hdd_size},
+	    $winner->{product}->{price};
 }
 
 sub hetzner_setup {
