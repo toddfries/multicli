@@ -19,6 +19,7 @@ use warnings;
 
 use Config::Tiny;
 use Date::Manip;
+use Date::Manip::Date;
 use Getopt::Std;
 use Data::Dumper;
 use POSIX qw(strftime);
@@ -500,7 +501,18 @@ sub namecheap_setup {
 
 sub weather_timefmt {
 	my ($str) = @_;
-	return strftime("%Y%m%d %H:%M:%S",localtime(UnixDate(ParseDate($str),"%s")));
+	if (!defined($str)) {
+		return "<str:undef>";
+	}
+	my $date = Date::Manip::Date->new();
+	if ($str =~ /^([0-9]+:[0-9]+ [AP]M) ([A-Z]+) on (.*)$/) {
+		$date->parse_date($3);
+		$date->parse_time($1);
+		return $date->printf("%Y%m%d %H:%M:%S");
+		$str = "$3 $1";
+	}
+	$date->parse($str);
+	return $date->printf("%Y%m%d %H:%M:%S");
 }
 
 sub weather_history {
@@ -513,9 +525,55 @@ sub weather_history {
 		    weather_timefmt($history->{date}{pretty}),
 		    $$e{maxtempi}, $$e{mintempi};
 	}
+	#      20170829 18:53:00 81.00  29.97 10.4  44% 0 0 0 Remarks
+	print "  Date     Time   Temp   Press wspd  hum rain/hail/snow Remarks\n";
 	foreach my $o (@{$history->{observations}}) {
-		printf "%s %4.2f\n", weather_timefmt($$o{date}{pretty}),
-		    $$o{tempi};
+		my $w = { };
+		foreach my $wt (("rain","snow","hail")) {
+			if (!defined($$o{$wt})) {
+				$w->{$wt} = 0;
+				next;
+			}
+			if ($$o{$wt} eq "N/A") {
+				$w->{$wt} = 0;
+				next;
+			}
+			$w->{$wt} = $$o{$wt};
+		}
+		$w->{fmt}->{tempi}->{std} = "%4.2f";
+		$w->{fmt}->{tempi}->{na} = "%5s";
+		$w->{fmt}->{hum}->{std} = "%3d%%";
+		$w->{fmt}->{hum}->{na} = "%4s";
+		my $na = 'n/a';
+		foreach my $wt (("tempi","hum")) {
+			if (!defined($$o{$wt})) {
+				$w->{$wt} = sprintf $w->{fmt}->{$wt}->{na},$na;
+				next;
+			}
+			if ($$o{$wt} =~ /n\/a/i) {
+				$w->{$wt} = sprintf $w->{fmt}->{$wt}->{na},$na;
+				next;
+			}
+			if ($$o{$wt} == -9999.0) {
+				$w->{$wt} = sprintf $w->{fmt}->{$wt}->{na},$na;
+				next;
+			}
+			$w->{$wt} = sprintf $w->{fmt}->{$wt}->{std}, $$o{$wt};
+		}
+		my $metar = $$o{metar};
+		my $rmk;
+		if ($metar =~ /.* RMK (.*)$/) {
+			$rmk = $1;
+		} else {
+			$rmk = "";
+		}
+		printf "%s %5s %6.2f %4.1f %4s %s %s %s %s\n",
+		    weather_timefmt($$o{date}{pretty}),
+		    $w->{tempi}, $$o{pressurei}, $$o{wspdi}, $w->{hum},
+		    $w->{rain}, $w->{hail}, $w->{snow}, $rmk;
+		#if ($$o{tempi} == -9999.00) {
+		#	print Dumper($o);
+		#}
 	}
 	#print Dumper($history);
 	return;
@@ -904,6 +962,8 @@ sub btcusd {
 	if (!defined($mcli->{coinbase})) {
 		$mcli->{coinbase} = coinbase_setup();
 	}
+
+	status("1 BTC = ? USD");
 	my $coinbase = $mcli->{coinbase};
 	my ($res) = $coinbase->get_spot_price("USD");
 	my $cbavg = $res->{data}->{amount};
