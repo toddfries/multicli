@@ -84,3 +84,8 @@ $ mcli -p weather -H 20010911
 20010911 22:53:00 72.00  30.10 10.4  55% 0 0 0 AO2 SLP193 T02220128 $
 20010911 23:53:00 71.10  30.10 12.7  57% 0 0 0 AO2 SLP192 T02170128 $
 ```
+
+If you find this is useful and wish to donate, I accept donations:
+
+BTC: (16VPbQsVGLs7frAUk4QqEgV2h5fAVfZaJd)[bitcoin:16VPbQsVGLs7frAUk4QqEgV2h5fAVfZaJd]
+DCR: (DsTY9sQyk3eX1FXXoJtyqFhY4EJ31NKY8En)[bitcoin:DsTY9sQyk3eX1FXXoJtyqFhY4EJ31NKY8En]
