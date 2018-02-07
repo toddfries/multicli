@@ -87,5 +87,6 @@ $ mcli -p weather -H 20010911
 
 If you find this is useful and wish to donate, I accept donations:
 
-BTC: (16VPbQsVGLs7frAUk4QqEgV2h5fAVfZaJd)[bitcoin:16VPbQsVGLs7frAUk4QqEgV2h5fAVfZaJd]
-DCR: (DsTY9sQyk3eX1FXXoJtyqFhY4EJ31NKY8En)[bitcoin:DsTY9sQyk3eX1FXXoJtyqFhY4EJ31NKY8En]
+- BTC: [16VPbQsVGLs7frAUk4QqEgV2h5fAVfZaJd](bitcoin:16VPbQsVGLs7frAUk4QqEgV2h5fAVfZaJd)
+
+- DCR: [DsTY9sQyk3eX1FXXoJtyqFhY4EJ31NKY8En](bitcoin:DsTY9sQyk3eX1FXXoJtyqFhY4EJ31NKY8En)
