@@ -47,57 +47,59 @@ our $mcli = { };
 
 our $r = ReadConf->new();
 
-if ($opt_p eq "all") {
+foreach my $p (split(/,/,$opt_p)) {
+if ($p eq "all") {
 	hetzner();
 	namecheap();
 	voipms();
 	c1360();
 }
 
-if ($opt_p eq "hetzner") {
+if ($p eq "hetzner") {
 	hetzner();
 }
 
-if ($opt_p eq "namecheap") {
+if ($p eq "namecheap") {
 	namecheap();
 }
 
-if ($opt_p eq "voipms") {
+if ($p eq "voipms") {
 	voipms();
 }
 
-if ($opt_p eq "c1360") {
+if ($p eq "c1360") {
 	c1360();
 }
 
-if ($opt_p eq "coinbase") {
+if ($p eq "coinbase") {
 	coinbase();
 }
 
-if ($opt_p eq "kraken") {
+if ($p eq "kraken") {
 	kraken();
 }
-if ($opt_p eq "bitstamp") {
+if ($p eq "bitstamp") {
 	bitstamp();
 }
-if ($opt_p eq "bci") {
+if ($p eq "bci") {
 	bci();
 }
-if ($opt_p eq "bw") {
+if ($p eq "bw") {
 	bw();
 }
-if ($opt_p eq "bleutrade") {
+if ($p eq "bleutrade") {
 	bleutrade();
 }
-if ($opt_p eq "btcusd") {
+if ($p eq "btcusd") {
 	btcusd();
 }
-if ($opt_p eq "dcrbtc") {
+if ($p eq "dcrbtc") {
 	dcrbtc();
 }
 
-if ($opt_p eq "weather") {
+if ($p eq "weather") {
 	weather();
+}
 }
 
 if (0) {
@@ -128,24 +130,44 @@ sub hetzner {
 	status("Hetzner server");
 
 	my @hservers = $hetzner->servers;
-	printf "%7s %12s %10s\n", "Number","Name","Cancel Date";
+	printf "%7s %12s %10s %10s %14s %s\n", "Number","Name","Paid Till","Cancel Date","IP","Traffic";
 	foreach my $s (@hservers) {
-		printf "%7d %12s %10s\n",
+		my ($ti,$to,$ts) = $s->traffic;
+		if (!defined($ts)) {
+			$ts = 0.0;
+		}
+		my $cancel = $s->cancel;
+		my $ed = "";
+		if (defined($cancel)) {
+			$ed = $cancel->get('earliest_cancellation_date');
+		}
+		printf "%7d %12s %10s %10s %15s %f\n",
 			$s->get('server_number'),
 			$s->get('server_name'),
-			$s->get('paid_until');
+			$s->get('paid_until'),
+			$ed,
+			$s->get('server_ip'),
+			$ts;
 	}
 
 	status("Server Market");
 	my $call = "order/server_market/product";
 	$call .= "?search=Ent";
-	$call .= "&min_cpu_benchmark=5681";
+	# i7-920 5005
+	# i7-930 5165
+	# i7-950 5682
+	# i7-960 6012
+	# i7-975 6370
+	# AMD Opteron 6338P 6853
+	$call .= "&min_cpu_benchmark=5004";
 	$call .= "&min_memory_size=47";
 	my $parsed = $hetzner->get($call);
 	my $winner;
 	if (!defined($opt_D)) {
 		$opt_D = 0;
 	}
+
+	# XXX make this a sort, and print up to X servers
 	foreach my $server ( @{$parsed} ) {
 		my $prod = $server->{product};
 		my $disk =  $prod->{hdd_count} * $prod->{hdd_size};
