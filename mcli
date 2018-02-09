@@ -86,8 +86,14 @@ if ($opt_p eq "bci") {
 if ($opt_p eq "bw") {
 	bw();
 }
+if ($opt_p eq "bleutrade") {
+	bleutrade();
+}
 if ($opt_p eq "btcusd") {
 	btcusd();
+}
+if ($opt_p eq "dcrbtc") {
+	dcrbtc();
 }
 
 if ($opt_p eq "weather") {
@@ -225,6 +231,19 @@ sub coinbase {
 	my $totalbtc=$totalusd/$price;
 	printf "Total in coinbase wallets: %10.8f BTC (%8.3f USD)\n",
 		$totalbtc, $totalusd;
+}
+
+sub bleutrade_setup {
+	use WebService::BleuTrade;
+	use LWP::UserAgent;
+
+	my $ua = LWP::UserAgent->new;
+	$ua->agent("mcli/0.0 ".$ua->agent);
+	$ua->agent("OpenBSD ftp");
+	$ua->env_proxy(1);
+
+	my $bt = WebService::BleuTrade->new(ua => $ua);
+	return $bt;
 }
 
 sub coinbase_setup {
@@ -956,6 +975,94 @@ sub parse_json {
 		printf "Pretty %s: %s\n", $name, $mcli->{JSON}->pretty->encode( $parsed )."\n";;
 	}
 	return $parsed;
+}
+
+sub bleutrade {
+	if (!defined($mcli->{bleutrade})) {
+		$mcli->{bleutrade} = bleutrade_setup();
+	}
+	my $bt = $mcli->{bleutrade};
+
+	status("BlueTrade");
+
+	#my $markets = $bt->getmarkets;
+	#print Dumper($markets);
+	my $ms = $bt->getmarketsummaries;
+	if ($ms->{success} ne "true") {
+		print "Failure!\n";
+		print Dumper($ms);
+		return;
+	}
+	my $ml = { };
+	foreach my $m (@{$ms->{result}}) {
+		if ($m->{IsActive} ne "true") {
+			next;
+		}
+		foreach my $v (keys %{$m}) {
+			my $mylen = length($m->{$v});
+			if (!defined($ml->{$v})) {
+				$ml->{$v} = $mylen;
+				next;
+			}
+			if ($mylen > $ml->{$v}) {
+				$ml->{$v} = $mylen;
+			}
+		}
+	}
+	printf	"%".$ml->{TimeStamp}."s ".
+		"%".$ml->{MarketName}."s ".
+		"%".$ml->{Ask}."s ".
+		"%".$ml->{High}."s ".
+		"%".$ml->{Average}."s ".
+		"%".$ml->{Low}."s ".
+		"%".$ml->{Bid}."s ".
+		"%".$ml->{BaseVolume}."s ".
+		"\n",
+		"TimeStamp",
+		"Name", "Ask", "High", "Average", "Low", "Bid", "BaseVolume";
+	foreach my $m (@{$ms->{result}}) {
+		if ($m->{IsActive} ne "true") {
+			next;
+		}
+		if (defined($opt_a)) {
+			if ($m->{MarketName} =~ /${opt_a}/) {
+				#
+			} else {
+				next;
+			}
+		}
+		printf	"%".$ml->{TimeStamp}."s ".
+			"%".$ml->{MarketName}."s ".
+			"%".$ml->{Ask}.".8f ".
+			"%".$ml->{High}.".8f ".
+			"%".$ml->{Average}.".8f ".
+			"%".$ml->{Low}.".8f ".
+			"%".$ml->{Bid}.".8f ".
+			"%".$ml->{BaseVolume}.".8f ".
+			"\n",
+			$m->{TimeStamp},
+			$m->{MarketName}, $m->{Ask}, $m->{High},
+			$m->{Average}, $m->{Low}, $m->{Bid},
+			$m->{BaseVolume};
+	}
+}
+	
+
+sub dcrbtc {
+	if (!defined($mcli->{bleutrade})) {
+		$mcli->{bleutrade} = bleutrade_setup();
+	}
+
+	status("1 DCR = ? BTC");
+	my $dcrbtc = $mcli->{bleutrade}->dcrbtc;
+	if ($dcrbtc->{success} eq "true") {
+		foreach my $m (@{$dcrbtc->{result}}) {
+			foreach my $v (sort keys %{$m}) {
+				print $v.": ".$m->{$v}."\n";
+			}
+		}
+	}
+	#print Dumper($dcrbtc);
 }
 
 sub btcusd {
