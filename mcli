@@ -1037,8 +1037,7 @@ sub bleutrade {
 
 		#print Dumper($bal);
 		return;
-	}
-	if ($opt_a eq "balances") {
+	} elsif ($opt_a eq "balances") {
 		status("BlueTrade Balances");
 
 		my $bal = $bt->getbalances;
@@ -1053,6 +1052,24 @@ sub bleutrade {
 		}
 
 		#print Dumper($bal);
+		return;
+	} elsif ($opt_a eq "getorders") {
+		my $ret = $bt->getorders;
+		if ($ret->{success} ne "true") {
+			print "bleutrade getorders: ".$ret->{message}."\n";
+		}
+		foreach my $o (@{$ret->{result}}) {
+			printf "%s %s %4s %9s %12.8f %12.8f\n",
+				$o->{OrderId},
+				$o->{Created},
+				$o->{Type},
+				$o->{Exchange},
+				$o->{QuantityRemaining},
+				$o->{Price};
+		}
+		return;
+	} elsif (defined($opt_a)) {
+		printf "Unhandled opt_a='%s'\n", $opt_a;
 		return;
 	}
 
