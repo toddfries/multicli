@@ -1,6 +1,6 @@
 #!/usr/bin/perl
 
-# Copyright (c) 2017 Todd T. Fries <todd@fries.net>
+# Copyright (c) 2017,2018 Todd T. Fries <todd@fries.net>
 #
 # Permission to use, copy, modify, and distribute this software for any
 # purpose with or without fee is hereby granted, provided that the above
@@ -89,6 +89,9 @@ if ($p eq "bw") {
 }
 if ($p eq "bleutrade") {
 	bleutrade();
+}
+if ($p eq "btexch") {
+	btexch();
 }
 if ($p eq "btcusd") {
 	btcusd();
@@ -259,12 +262,27 @@ sub bleutrade_setup {
 	use WebService::BleuTrade;
 	use LWP::UserAgent;
 
+	my $conf = $ENV{'HOME'}."/.bleutrade.conf";
+	my $config = $r->readconf($conf)->{_};
+	my $key = $config->{key};
+	my $ro = $config->{ro};
+
 	my $ua = LWP::UserAgent->new;
 	$ua->agent("mcli/0.0 ".$ua->agent);
 	$ua->agent("OpenBSD ftp");
+	$ua->agent("Mozilla/4.0 (compatible; Bleutrade API perl client)");
 	$ua->env_proxy(1);
 
-	my $bt = WebService::BleuTrade->new(ua => $ua);
+	my $bt;
+	if (defined($key) && defined($ro)) {
+		$bt = WebService::BleuTrade->new(
+		    ua => $ua,
+		    api_key => $key,
+		    api_secret => $ro,
+		);
+	} else {
+		$bt = WebService::BleuTrade->new(ua => $ua);
+	}
 	return $bt;
 }
 
@@ -1005,6 +1023,39 @@ sub bleutrade {
 	}
 	my $bt = $mcli->{bleutrade};
 
+	if ($opt_a =~ /depositaddr:([A-Z]+)/) {
+		my $coin = $1;
+		status("BlueTrade Deposit Addr for $coin");
+
+		my $ret = $bt->getdepositaddress($coin);
+
+		my $addr = $ret->{result}->{Address};
+		my $rcoin = $ret->{result}->{Currency};
+		if (defined($addr)) {
+			printf "%5s %s\n", $rcoin, $addr;
+		}
+
+		#print Dumper($bal);
+		return;
+	}
+	if ($opt_a eq "balances") {
+		status("BlueTrade Balances");
+
+		my $bal = $bt->getbalances;
+
+		foreach my $cur (@{$bal->{result}}) {
+			my $addr = $cur->{CryptoAddress};
+			if (!defined($addr)) {
+				$addr = "<undef>";
+			}
+			printf "%5s %15.8f %s\n", $cur->{Currency},
+			    $cur->{Balance}, $addr;
+		}
+
+		#print Dumper($bal);
+		return;
+	}
+
 	status("BlueTrade");
 
 	#my $markets = $bt->getmarkets;
@@ -1080,10 +1131,48 @@ sub dcrbtc {
 	if ($dcrbtc->{success} eq "true") {
 		foreach my $m (@{$dcrbtc->{result}}) {
 			foreach my $v (sort keys %{$m}) {
+				if ($opt_q > 0) {
+					if ($v eq "Last") {
+						print $m->{$v}."\n";
+					}
+					next;
+				}
 				print $v.": ".$m->{$v}."\n";
 			}
 		}
 	}
+	#print Dumper($dcrbtc);
+}
+
+# BlueTrade Exchange
+sub btexch {
+	if (!defined($opt_a)) {
+		print "btexch: opt_a = <undef>\n";
+		return;
+	}
+
+	if (!defined($mcli->{bleutrade})) {
+		$mcli->{bleutrade} = bleutrade_setup();
+	}
+
+	my $bt = $mcli->{bleutrade};
+	my $btexch = $bt->getmarketsummaries;
+
+	foreach my $pair (split(/,/,$opt_a)) {
+		my ($a,$b) = split(/:/,$pair);
+		if ($btexch->{success} ne "true") {
+			next;
+		}
+		foreach my $m (@{$btexch->{result}}) {
+			if ($m->{MarketName} ne "${a}_${b}") {
+				next;
+			}
+
+			status("1 ${a} = ? ${b}");
+			print $m->{Average}."\n";
+		}
+	}
+
 	#print Dumper($dcrbtc);
 }
 
