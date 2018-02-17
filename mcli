@@ -34,10 +34,13 @@ our $opt_q = 0;
 our $opt_t;    # bci/rawtx txid
 our $opt_v = 0;
 our $opt_c; # config file, if desired to over-ride
-our $opt_H; # historic date for weather
-our $opt_D;
+our $opt_H; # weather historic date
 
-getopt('a:c:p:q:t:vH:D:');
+our $opt_C; # hetzner min cpu
+our $opt_D; # hetzner min disk
+our $opt_M; # hetzner min mem
+
+getopt('a:c:p:q:t:vC:D:H:M:');
 
 if (!defined($opt_p)) {
 	$opt_p = "all";
@@ -156,56 +159,126 @@ sub hetzner {
 	status("Server Market");
 	my $call = "order/server_market/product";
 	$call .= "?search=Ent";
+
+	# min_cpu_benchmark
 	# i7-920 5005
 	# i7-930 5165
 	# i7-950 5682
 	# i7-960 6012
 	# i7-975 6370
 	# AMD Opteron 6338P 6853
-	$call .= "&min_cpu_benchmark=5004";
-	$call .= "&min_memory_size=47";
-	my $parsed = $hetzner->get($call);
 	my $winner;
 	if (!defined($opt_D)) {
 		$opt_D = 0;
 	}
+	my $servers = { };
+	$servers->{px}->{minmem} = 47;
+	$servers->{px}->{mincpu} = 5005;
+	$servers->{px}->{mindisk} = 2048;
 
-	# XXX make this a sort, and print up to X servers
-	foreach my $server ( @{$parsed} ) {
-		my $prod = $server->{product};
-		my $disk =  $prod->{hdd_count} * $prod->{hdd_size};
-		if ($disk < $opt_D) {
-			next;
+	$servers->{st}->{minmem} = 7;
+	$servers->{st}->{mincpu} = 999;
+	$servers->{st}->{mindisk} = 8191;
+
+	$servers->{bst}->{minmem} = 3;
+	$servers->{bst}->{mincpu} = 1;
+	$servers->{bst}->{mindisk} = 16383;
+
+	if (defined($opt_D)||defined($opt_C)||defined($opt_M)) {
+		$servers->{cli}->{minmem} = 1;
+		$servers->{cli}->{mincpu} = 1;
+		$servers->{cli}->{mindisk} = 1;
+		if (defined($opt_D)) {
+			$servers->{cli}->{mindisk} = $opt_D;
 		}
-		if (!defined($winner)) {
-			$winner = $server;
-			next;
+		if (defined($opt_M)) {
+			$servers->{cli}->{minmem} = $opt_M;
 		}
-		my $winprod = $winner->{product};
-		if ($prod->{price} < $winprod->{price}) {
-			next;
+		if (defined($opt_C)) {
+			$servers->{cli}->{mincpu} = $opt_C;
 		}
-		if ($prod->{price} == $winprod->{price}) {
-			if ($prod->{memory_size} > $winprod->{memory_size}) {
-				$winner = $server;
+	}
+
+	my $mins = { };
+
+	foreach my $name (keys %{$servers}) {
+		foreach my $mn (('minmem', 'mincpu', 'mindisk')) {
+			if (!defined($mins->{$mn})) {
+				$mins->{$mn} = $servers->{$name}->{$mn};
 				next;
 			}
-			my $windisk = $winner->{hdd_count} * $winner->{hdd_size};
-			if ($disk > $windisk) {
-				$winner = $server;
-				next;
-			}
-			if ($prod->{cpu_benchmark} > $winner->{cpu_benchmark}) {
-				$winner = $server;
-				next;
+			if ($mins->{$mn} > $servers->{$name}->{$mn}) {
+				$mins->{$mn} = $servers->{$name}->{$mn};
 			}
 		}
 	}
 
-	printf "%7s. %5s %dGB RAM, %dx%dGB disk %5.2f EUR\n", $winner->{product}->{id},
-	    $winner->{product}->{name}, $winner->{product}->{memory_size},
-	    $winner->{product}->{hdd_count}, $winner->{product}->{hdd_size},
-	    $winner->{product}->{price};
+	$call .= "&min_cpu_benchmark=".$mins->{mincpu};
+	$call .= "&min_memory_size=".$mins->{minmem};
+	my $parsed = $hetzner->get($call);
+
+	my $scount=0;
+
+	# XXX make this a sort, and print up to X servers
+	foreach my $server ( @{$parsed} ) {
+		if ($scount++ < 1 && $opt_v > 0) {
+			print Dumper($server);
+		}
+		my $sp = $server->{product};
+		my $disk =  $sp->{hdd_count} * $sp->{hdd_size};
+		if ($disk < $opt_D) {
+			next;
+		}
+		foreach my $name (keys %{$servers}) {
+			my $s = $servers->{$name};
+			if ($s->{minmem} > $sp->{memory_size}) {
+				next;
+			}
+			if ($s->{mincpu} > $sp->{cpu_benchmark}) {
+				next;
+			}
+			if ($s->{mindisk} > ($sp->{hdd_count} * $sp->{hdd_size})) {
+				next;
+			}
+			if (!defined($s->{winner})) {
+				$s->{winner} = $server;
+				next;
+			}
+			my $wp = $s->{winner}->{product};
+			if ($sp->{price} < $wp->{price}) {
+				next;
+			}
+			if ($sp->{price} == $wp->{price}) {
+				if ($sp->{memory_size} > $wp->{memory_size}) {
+					$s->{winner} = $server;
+					next;
+				}
+				my $wd = $s->{winner}->{hdd_count} * $s->{winner}->{hdd_size};
+				if ($disk > $wd) {
+					$s->{winner} = $server;
+					next;
+				}
+				if ($sp->{cpu_benchmark} > $s->{winner}->{cpu_benchmark}) {
+					$s->{winner} = $server;
+					next;
+				}
+			}
+		}
+	}
+
+	printf "%7s  %5s %3s %6s %5s %5s (min cpu/disk/ram name)\n",
+	    "PID", "Name", "RAM", "disk", "total", "EUR";
+	foreach my $name (keys %{$servers}) {
+		my $wp = $servers->{$name}->{winner}->{product};
+		printf "%7s. %5s %3d %dx%4d=%5d %5.2f (%5d %5d %6d %s)\n", $wp->{id}, $wp->{name},
+		    $wp->{memory_size}, $wp->{hdd_count}, $wp->{hdd_size},
+		    $wp->{hdd_count} * $wp->{hdd_size},
+		    $wp->{price},
+		    $servers->{$name}->{mincpu},
+		    $servers->{$name}->{mindisk},
+		    $servers->{$name}->{minmem},
+		    $name;
+	}
 }
 
 sub hetzner_setup {
