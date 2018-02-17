@@ -253,12 +253,12 @@ sub hetzner {
 					$s->{winner} = $server;
 					next;
 				}
-				my $wd = $s->{winner}->{hdd_count} * $s->{winner}->{hdd_size};
+				my $wd = $wp->{hdd_count} * $wp->{hdd_size};
 				if ($disk > $wd) {
 					$s->{winner} = $server;
 					next;
 				}
-				if ($sp->{cpu_benchmark} > $s->{winner}->{cpu_benchmark}) {
+				if ($sp->{cpu_benchmark} > $wp->{cpu_benchmark}) {
 					$s->{winner} = $server;
 					next;
 				}
