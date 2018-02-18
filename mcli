@@ -1096,11 +1096,13 @@ sub bleutrade {
 	}
 	my $bt = $mcli->{bleutrade};
 
-	if ($opt_a =~ /depositaddr:([A-Z]+)/) {
+	my $ret;
+	foreach my $a (split(/,/,$opt_a)) {
+	    if ($a =~ /depositaddr:([A-Z]+)/) {
 		my $coin = $1;
 		status("BlueTrade Deposit Addr for $coin");
 
-		my $ret = $bt->getdepositaddress($coin);
+		$ret = $bt->getdepositaddress($coin);
 
 		my $addr = $ret->{result}->{Address};
 		my $rcoin = $ret->{result}->{Currency};
@@ -1109,14 +1111,14 @@ sub bleutrade {
 		}
 
 		#print Dumper($bal);
-		return;
-	} elsif ($opt_a eq "balances") {
+		next;
+	    } elsif ($a eq "balances") {
 		status("BlueTrade Balances");
 
-		my $ret = $bt->getbalances;
+		$ret = $bt->getbalances;
 		if ($ret->{success} ne "true") {
 			print "bleutrade getbalances: ".$ret->{message}."\n";
-			return;
+			next;
 		}
 
 		foreach my $cur (@{$ret->{result}}) {
@@ -1129,12 +1131,12 @@ sub bleutrade {
 		}
 
 		#print Dumper($ret);
-		return;
-	} elsif ($opt_a eq "getorders") {
-		my $ret = $bt->getorders;
+		next;
+	    } elsif ($a eq "getorders") {
+		$ret = $bt->getorders;
 		if ($ret->{success} ne "true") {
 			print "bleutrade getorders: ".$ret->{message}."\n";
-			return;
+			next;
 		}
 		foreach my $o (@{$ret->{result}}) {
 			printf "%s %s %4s %9s %12.8f %12.8f\n",
@@ -1145,93 +1147,106 @@ sub bleutrade {
 				$o->{QuantityRemaining},
 				$o->{Price};
 		}
-		return;
-	} elsif ($opt_a eq "getorderbook") {
-		status("BleuTrade orderbook");
-		my $ret = $bt->getorderbook("DCR_BTC","ALL",50);
+		next;
+	    } elsif ($a =~ /^getorderbook/) {
+		my @markets = ("DCR_BTC");
+		if ($a ne "getorderbook") {
+			if ($a =~ /^getorderbook=(.*)$/) {
+				@markets = split(/\//,$1);
+			}
+		}
+		foreach my $m (@markets) {
+			status("BleuTrade $m orderbook");
+			$ret = $bt->getorderbook("DCR_BTC","ALL",50);
+			if ($ret->{success} ne "true") {
+				print "bleutrade getorderbook: ".$ret->{message}."\n";
+				next;
+			}
+			my @buys = @{$ret->{result}->{buy}};
+			my @sells = @{$ret->{result}->{sell}};
+			my $i=0;
+			while (defined($buys[$i]) || defined($sells[$i])) {
+				my $b = $buys[$i];
+				my $s = $sells[$i];
+				my ($bs, $ss) = ("","");
+				if (defined($b)) {
+					$bs = sprintf "%14.8f %10.8f", $b->{Quantity},
+				    	$b->{Rate};
+				}
+				if (defined($s)) {
+					$ss = sprintf "%14.8f %10.8f", $s->{Quantity},
+				    	$s->{Rate};
+				}
+					
+				$i++;
+				printf "%02d. %25s       %25s\n", $i, $bs, $ss;
+			}
+			#print Dumper($ret);
+			next;
+		}
+	    } elsif ($a eq "markets") {
+		status("BlueTrade Markets");
+		$ret = $bt->getmarketsummaries;
 		if ($ret->{success} ne "true") {
-			print "bleutrade getorderbook: ".$ret->{message}."\n";
+			print "bleutrade getmarketsummaries: ".$ret->{message}."\n";
 			return;
 		}
-		my @buys = @{$ret->{result}->{buy}};
-		my @sells = @{$ret->{result}->{sell}};
-		my $i=0;
-		while (defined($buys[$i])) {
-			my $b = $buys[$i];
-			my $s = $sells[$i];
-			$i++;
-			printf "%14.8f %10.8f       %14.8f %10.8f\n",
-				$b->{Quantity}, $b->{Rate},
-				$s->{Quantity}, $s->{Rate};
-		}
-		#print Dumper($ret);
-		return;
-	} elsif (defined($opt_a)) {
-		printf "Unhandled opt_a='%s'\n", $opt_a;
-		return;
-	}
-
-	status("BlueTrade");
-
-	#my $markets = $bt->getmarkets;
-	#print Dumper($markets);
-	my $ms = $bt->getmarketsummaries;
-	if ($ms->{success} ne "true") {
-		print "Failure!\n";
-		print Dumper($ms);
-		return;
-	}
-	my $ml = { };
-	foreach my $m (@{$ms->{result}}) {
-		if ($m->{IsActive} ne "true") {
-			next;
-		}
-		foreach my $v (keys %{$m}) {
-			my $mylen = length($m->{$v});
-			if (!defined($ml->{$v})) {
-				$ml->{$v} = $mylen;
+		my $ml = { };
+		foreach my $m (@{$ret->{result}}) {
+			if ($m->{IsActive} ne "true") {
 				next;
 			}
-			if ($mylen > $ml->{$v}) {
-				$ml->{$v} = $mylen;
-			}
-		}
-	}
-	printf	"%".$ml->{TimeStamp}."s ".
-		"%".$ml->{MarketName}."s ".
-		"%".$ml->{Ask}."s ".
-		"%".$ml->{High}."s ".
-		"%".$ml->{Average}."s ".
-		"%".$ml->{Low}."s ".
-		"%".$ml->{Bid}."s ".
-		"%".$ml->{BaseVolume}."s ".
-		"\n",
-		"TimeStamp",
-		"Name", "Ask", "High", "Average", "Low", "Bid", "BaseVolume";
-	foreach my $m (@{$ms->{result}}) {
-		if ($m->{IsActive} ne "true") {
-			next;
-		}
-		if (defined($opt_a)) {
-			if ($m->{MarketName} =~ /${opt_a}/) {
-				#
-			} else {
-				next;
+			foreach my $v (keys %{$m}) {
+				my $mylen = length($m->{$v});
+				if (!defined($ml->{$v})) {
+					$ml->{$v} = $mylen;
+					next;
+				}
+				if ($mylen > $ml->{$v}) {
+					$ml->{$v} = $mylen;
+				}
 			}
 		}
 		printf	"%".$ml->{TimeStamp}."s ".
 			"%".$ml->{MarketName}."s ".
-			"%".$ml->{Ask}.".8f ".
-			"%".$ml->{High}.".8f ".
-			"%".$ml->{Average}.".8f ".
-			"%".$ml->{Low}.".8f ".
-			"%".$ml->{Bid}.".8f ".
-			"%".$ml->{BaseVolume}.".8f ".
+			"%".$ml->{Ask}."s ".
+			"%".$ml->{High}."s ".
+			"%".$ml->{Average}."s ".
+			"%".$ml->{Low}."s ".
+			"%".$ml->{Bid}."s ".
+			"%".$ml->{BaseVolume}."s ".
 			"\n",
-			$m->{TimeStamp},
-			$m->{MarketName}, $m->{Ask}, $m->{High},
-			$m->{Average}, $m->{Low}, $m->{Bid},
-			$m->{BaseVolume};
+			"TimeStamp",
+			"Name", "Ask", "High", "Average", "Low", "Bid", "BaseVolume";
+		foreach my $m (@{$ret->{result}}) {
+			if ($m->{IsActive} ne "true") {
+				next;
+			}
+			if (defined($a)) {
+				if ($m->{MarketName} =~ /${a}/) {
+					#
+				} else {
+					next;
+				}
+			}
+			printf	"%".$ml->{TimeStamp}."s ".
+				"%".$ml->{MarketName}."s ".
+				"%".$ml->{Ask}.".8f ".
+				"%".$ml->{High}.".8f ".
+				"%".$ml->{Average}.".8f ".
+				"%".$ml->{Low}.".8f ".
+				"%".$ml->{Bid}.".8f ".
+				"%".$ml->{BaseVolume}.".8f ".
+				"\n",
+				$m->{TimeStamp},
+				$m->{MarketName}, $m->{Ask}, $m->{High},
+				$m->{Average}, $m->{Low}, $m->{Bid},
+				$m->{BaseVolume};
+		}
+	    } elsif (defined($a)) {
+		printf "Unhandled a='%s'\n", $a;
+		next;
+	    }
 	}
 }
 	
