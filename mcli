@@ -1090,6 +1090,15 @@ sub parse_json {
 	return $parsed;
 }
 
+sub btcheckret {
+	my ($call, $ret) = @_;
+	if ($ret->{success} eq "true") {
+		return $ret;
+	}
+	printf "bluetrade %s: %s\n", $call, $ret->{message};
+	return undef;
+}
+
 sub bleutrade {
 	if (!defined($mcli->{bleutrade})) {
 		$mcli->{bleutrade} = bleutrade_setup();
@@ -1102,7 +1111,10 @@ sub bleutrade {
 		my $coin = $1;
 		status("BlueTrade Deposit Addr for $coin");
 
-		$ret = $bt->getdepositaddress($coin);
+		$ret = btcheckret('depositaddr',$bt->getdepositaddress($coin));
+		if (!defined($ret)) {
+			next;
+		}
 
 		my $addr = $ret->{result}->{Address};
 		my $rcoin = $ret->{result}->{Currency};
@@ -1115,9 +1127,8 @@ sub bleutrade {
 	    } elsif ($a eq "balances") {
 		status("BlueTrade Balances");
 
-		$ret = $bt->getbalances;
-		if ($ret->{success} ne "true") {
-			print "bleutrade getbalances: ".$ret->{message}."\n";
+		$ret = btcheckret('getbalances',$bt->getbalances);
+		if (!defined($ret)) {
 			next;
 		}
 
@@ -1133,9 +1144,8 @@ sub bleutrade {
 		#print Dumper($ret);
 		next;
 	    } elsif ($a eq "getorders") {
-		$ret = $bt->getorders;
-		if ($ret->{success} ne "true") {
-			print "bleutrade getorders: ".$ret->{message}."\n";
+		$ret = btcheckret('getorders',$bt->getorders);
+		if (!defined($ret)) {
 			next;
 		}
 		foreach my $o (@{$ret->{result}}) {
@@ -1157,9 +1167,8 @@ sub bleutrade {
 		}
 		foreach my $m (@markets) {
 			status("BleuTrade $m orderbook");
-			$ret = $bt->getorderbook("DCR_BTC","ALL",50);
-			if ($ret->{success} ne "true") {
-				print "bleutrade getorderbook: ".$ret->{message}."\n";
+			$ret = btcheckret("orderbook x $m",$bt->getorderbook($m,"ALL",50));
+			if (!defined($ret)) {
 				next;
 			}
 			my @buys = @{$ret->{result}->{buy}};
@@ -1186,10 +1195,9 @@ sub bleutrade {
 		}
 	    } elsif ($a eq "markets") {
 		status("BlueTrade Markets");
-		$ret = $bt->getmarketsummaries;
-		if ($ret->{success} ne "true") {
-			print "bleutrade getmarketsummaries: ".$ret->{message}."\n";
-			return;
+		$ret = btcheckret('markets',$bt->getmarketsummaries);
+		if (!defined($ret)) {
+			next;
 		}
 		my $ml = { };
 		foreach my $m (@{$ret->{result}}) {
