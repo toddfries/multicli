@@ -1131,31 +1131,63 @@ sub bleutrade {
 		if (!defined($ret)) {
 			next;
 		}
+		my $rmk = btcheckret('markets',$bt->getmarketsummaries);
+		if (!defined($rmk)) {
+			next;
+		}
 
+		printf "%5s %15s %15s %15s %15s %s\n",
+			"Curr.","Balance", "BTC", "Available", "Pending",
+			"Deposit Address";
 		foreach my $cur (@{$ret->{result}}) {
 			my $addr = $cur->{CryptoAddress};
 			if (!defined($addr)) {
 				$addr = "<undef>";
 			}
-			printf "%5s %15.8f %s\n", $cur->{Currency},
-			    $cur->{Balance}, $addr;
+			my $currency = $cur->{Currency};
+			my $btcrate = 0.0;
+			if ($currency eq "BTC") {
+				$btcrate = 1.0;
+			} else {
+			    foreach my $m (@{$rmk->{result}}) {
+				#print "comparing ${currency}_BTC to ".$m->{MarketName}."\n";
+				if ($m->{MarketName} eq "${currency}_BTC") {
+					$btcrate = $m->{Average};
+					last;
+				}
+			    }
+			}
+			#print "btcrate = $btcrate\n";
+			my $btcequiv = 0.0;
+			if (defined($btcrate)) {
+				$btcequiv = $cur->{Balance} * $btcrate;
+			}
+			
+			printf "%5s %15.8f %15.8f %15.8f %15.8f %s\n",
+			    $cur->{Currency}, $cur->{Balance}, $btcequiv,
+			    $cur->{Available}, $cur->{Pending}, $addr;
 		}
 
 		#print Dumper($ret);
 		next;
 	    } elsif ($a eq "getorders") {
-		$ret = btcheckret('getorders',$bt->getorders);
+		$ret = btcheckret('getorders',$bt->getorders(undef,'OK'));
 		if (!defined($ret)) {
 			next;
 		}
+		printf "%8s %19s %4s %9s %12s %12s %12s %12s\n",
+			"Orderid", "Created", "Type", "Exchange", "Remains",
+			"Price", "Quantity", "QBaseTrade";
 		foreach my $o (@{$ret->{result}}) {
-			printf "%s %s %4s %9s %12.8f %12.8f\n",
+			printf "%8d %19s %4s %9s %12.8f %12.8f %12.8f %12.8f\n",
 				$o->{OrderId},
 				$o->{Created},
 				$o->{Type},
 				$o->{Exchange},
 				$o->{QuantityRemaining},
-				$o->{Price};
+				$o->{Price},
+				$o->{Quantity},
+				$o->{QuantityBaseTraded};
 		}
 		next;
 	    } elsif ($a =~ /^getorderbook/) {
@@ -1193,6 +1225,25 @@ sub bleutrade {
 			#print Dumper($ret);
 			next;
 		}
+	    } elsif ($a =~ /^markethistory/) {
+		my @markets = ("DCR_BTC");
+		if ($a ne "getmarkethistory") {
+			if ($a =~ /^getmarkethistory=(.*)$/) {
+				@markets = split(/\//,$1);
+			}
+		}
+		foreach my $m (@markets) {
+			status("BleuTrade $m markethistory");
+			$ret = btcheckret("markethistory", $bt->getmarkethistory);
+			if (!defined($ret)) {
+				next;
+			}
+			print Dumper($ret);
+		}
+	    } elsif ($a eq 'getorderhistory') {
+		status("BleuTrade order history");
+		$ret = $bt->getorderhistory;
+		print Dumper($ret);
 	    } elsif ($a eq "markets") {
 		status("BlueTrade Markets");
 		$ret = btcheckret('markets',$bt->getmarketsummaries);
