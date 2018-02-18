@@ -1113,9 +1113,13 @@ sub bleutrade {
 	} elsif ($opt_a eq "balances") {
 		status("BlueTrade Balances");
 
-		my $bal = $bt->getbalances;
+		my $ret = $bt->getbalances;
+		if ($ret->{success} ne "true") {
+			print "bleutrade getbalances: ".$ret->{message}."\n";
+			return;
+		}
 
-		foreach my $cur (@{$bal->{result}}) {
+		foreach my $cur (@{$ret->{result}}) {
 			my $addr = $cur->{CryptoAddress};
 			if (!defined($addr)) {
 				$addr = "<undef>";
@@ -1124,12 +1128,13 @@ sub bleutrade {
 			    $cur->{Balance}, $addr;
 		}
 
-		#print Dumper($bal);
+		#print Dumper($ret);
 		return;
 	} elsif ($opt_a eq "getorders") {
 		my $ret = $bt->getorders;
 		if ($ret->{success} ne "true") {
 			print "bleutrade getorders: ".$ret->{message}."\n";
+			return;
 		}
 		foreach my $o (@{$ret->{result}}) {
 			printf "%s %s %4s %9s %12.8f %12.8f\n",
@@ -1140,6 +1145,26 @@ sub bleutrade {
 				$o->{QuantityRemaining},
 				$o->{Price};
 		}
+		return;
+	} elsif ($opt_a eq "getorderbook") {
+		status("BleuTrade orderbook");
+		my $ret = $bt->getorderbook("DCR_BTC","ALL",50);
+		if ($ret->{success} ne "true") {
+			print "bleutrade getorderbook: ".$ret->{message}."\n";
+			return;
+		}
+		my @buys = @{$ret->{result}->{buy}};
+		my @sells = @{$ret->{result}->{sell}};
+		my $i=0;
+		while (defined($buys[$i])) {
+			my $b = $buys[$i];
+			my $s = $sells[$i];
+			$i++;
+			printf "%14.8f %10.8f       %14.8f %10.8f\n",
+				$b->{Quantity}, $b->{Rate},
+				$s->{Quantity}, $s->{Rate};
+		}
+		#print Dumper($ret);
 		return;
 	} elsif (defined($opt_a)) {
 		printf "Unhandled opt_a='%s'\n", $opt_a;
