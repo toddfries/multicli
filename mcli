@@ -1125,6 +1125,8 @@ sub bleutrade {
 		#print Dumper($bal);
 		next;
 	    } elsif ($a eq "balances") {
+		my $totalbalance=0.0;
+
 		status("BlueTrade Balances");
 
 		$ret = btcheckret('getbalances',$bt->getbalances);
@@ -1137,7 +1139,7 @@ sub bleutrade {
 		}
 
 		printf "%5s %15s %15s %15s %15s %s\n",
-			"Curr.","Balance", "BTC", "Available", "Pending",
+			"Curr.","Balance", "X/BTC", "BTC", "Available", "Pending",
 			"Deposit Address";
 		foreach my $cur (@{$ret->{result}}) {
 			my $addr = $cur->{CryptoAddress};
@@ -1161,12 +1163,16 @@ sub bleutrade {
 			my $btcequiv = 0.0;
 			if (defined($btcrate)) {
 				$btcequiv = $cur->{Balance} * $btcrate;
+			} else {
+				$btcrate = 0.0;
 			}
 			
-			printf "%5s %15.8f %15.8f %15.8f %15.8f %s\n",
-			    $cur->{Currency}, $cur->{Balance}, $btcequiv,
+			printf "%5s %15.8f %15.8f %15.8f %15.8f %15.8f %s\n",
+			    $cur->{Currency}, $cur->{Balance}, $btcrate, $btcequiv,
 			    $cur->{Available}, $cur->{Pending}, $addr;
+			$totalbalance += $btcequiv;
 		}
+		printf "%5s %15s %15s %15.8f\n", "Total", "", "", $totalbalance;
 
 		#print Dumper($ret);
 		next;
@@ -1175,13 +1181,14 @@ sub bleutrade {
 		if (!defined($ret)) {
 			next;
 		}
-		printf "%8s %19s %4s %9s %12s %12s %12s %12s\n",
-			"Orderid", "Created", "Type", "Exchange", "Remains",
+		printf "%8s %19s %6s %4s %9s %12s %12s %12s %12s\n",
+			"Orderid", "Created", "Status", "Type", "Exchange", "Remains",
 			"Price", "Quantity", "QBaseTrade";
 		foreach my $o (@{$ret->{result}}) {
-			printf "%8d %19s %4s %9s %12.8f %12.8f %12.8f %12.8f\n",
+			printf "%8d %19s %6s %4s %9s %12.8f %12.8f %12.8f %12.8f\n",
 				$o->{OrderId},
 				$o->{Created},
+				$o->{Status},
 				$o->{Type},
 				$o->{Exchange},
 				$o->{QuantityRemaining},
