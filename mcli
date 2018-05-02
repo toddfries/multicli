@@ -184,6 +184,14 @@ sub hetzner {
 	$servers->{bst}->{mincpu} = 1;
 	$servers->{bst}->{mindisk} = 16383;
 
+	$servers->{mem64}->{minmem} = 63;
+	$servers->{mem64}->{mincpu} = 1;
+	$servers->{mem64}->{mindisk} = 0;
+
+	$servers->{mem128}->{minmem} = 127;
+	$servers->{mem128}->{mincpu} = 1;
+	$servers->{mem128}->{mindisk} = 0;
+
 	if (defined($opt_D)||defined($opt_C)||defined($opt_M)) {
 		$servers->{cli}->{minmem} = 1;
 		$servers->{cli}->{mincpu} = 1;
@@ -924,7 +932,7 @@ sub voipms_setup {
 	my $vconfig = $r->readconf($ENV{'HOME'}."/.voipms.conf")->{_};
 	if (!defined($vconfig->{user}) || !defined($vconfig->{pass})) {
 		print "User or Pass is Null and void, bailing for now\n";
-		exit(1);
+		return undef;
 	}
 	my $voip = VOIP::MS->new(
 		username => $vconfig->{user},
@@ -948,7 +956,7 @@ sub c1360 {
 	my @accounts = $ofx->accounts;
 	if (! @accounts) {
 		printf "Something went wrong: %s\n", $ofx->response;
-		exit(1);
+		return;
 	}
 	#print "Seems ok so far:\n";
 	my $status = $ofx->response->signon_status_code( $fi );
@@ -1124,6 +1132,58 @@ sub bleutrade {
 
 		#print Dumper($bal);
 		next;
+	    } elsif ($a eq "ticker") {
+		status("BleuTrade Ticker");
+		while (1) {
+		my $totalbalance=0.0;
+		$ret = btcheckret('getbalances',$bt->getbalances);
+		if (!defined($ret)) {
+			next;
+		}
+		my $rmk = btcheckret('markets',$bt->getmarketsummaries);
+		if (!defined($rmk)) {
+			next;
+		}
+
+		my $str = "";
+		foreach my $cur (@{$ret->{result}}) {
+			my $addr = $cur->{CryptoAddress};
+			if (!defined($addr)) {
+				$addr = "<undef>";
+			}
+			my $currency = $cur->{Currency};
+			my $btcrate = 0.0;
+			if ($currency eq "BTC") {
+				$btcrate = 1.0;
+			} else {
+			    foreach my $m (@{$rmk->{result}}) {
+				if ($m->{MarketName} eq "${currency}_BTC") {
+					$btcrate = $m->{Average};
+					last;
+				}
+			    }
+			}
+			my $btcequiv = 0.0;
+			if (defined($btcrate)) {
+				$btcequiv = $cur->{Balance} * $btcrate;
+			} else {
+				$btcrate = 0.0;
+			}
+			if ($cur->{Balance} == 0.0) {
+				next;
+			}
+			
+			$str .= sprintf "%s=%.8f,%d/",
+			    $cur->{Currency}, $cur->{Balance},
+			    $btcrate * 100000000;
+			$totalbalance += $btcequiv;
+		}
+		$str =~ s/\/$//;
+		$str .= sprintf " %.8fBTC\n", $totalbalance;
+		print $str;
+		sleep(600);
+		}
+		next;
 	    } elsif ($a eq "balances") {
 		my $totalbalance=0.0;
 
@@ -1138,7 +1198,7 @@ sub bleutrade {
 			next;
 		}
 
-		printf "%5s %15s %15s %15s %15s %s\n",
+		printf "%5s %15s %15s %15s %15s %15s %s\n",
 			"Curr.","Balance", "X/BTC", "BTC", "Available", "Pending",
 			"Deposit Address";
 		foreach my $cur (@{$ret->{result}}) {
@@ -1172,7 +1232,7 @@ sub bleutrade {
 			    $cur->{Available}, $cur->{Pending}, $addr;
 			$totalbalance += $btcequiv;
 		}
-		printf "%5s %15s %15s %15.8f\n", "Total", "", "", $totalbalance;
+		printf "%5s %15.8f %15.8f %15.8f\n", "Total", $totalbalance, $totalbalance, $totalbalance;
 
 		#print Dumper($ret);
 		next;
