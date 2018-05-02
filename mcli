@@ -161,6 +161,7 @@ sub hetzner {
 	$call .= "?search=Ent";
 
 	# min_cpu_benchmark
+	# cpu    bench
 	# i7-920 5005
 	# i7-930 5165
 	# i7-950 5682
@@ -173,8 +174,12 @@ sub hetzner {
 	}
 	my $servers = { };
 	$servers->{px}->{minmem} = 47;
-	$servers->{px}->{mincpu} = 5005;
+	$servers->{px}->{mincpu} = 5681;
 	$servers->{px}->{mindisk} = 2048;
+
+	$servers->{pxupgrade}->{minmem} = 47;
+	$servers->{pxupgrade}->{mincpu} = 5683;
+	$servers->{pxupgrade}->{mindisk} = 2048;
 
 	$servers->{st}->{minmem} = 7;
 	$servers->{st}->{mincpu} = 999;
@@ -274,7 +279,7 @@ sub hetzner {
 		}
 	}
 
-	printf "%7s  %5s %3s %6s %5s %5s (min cpu/disk/ram name)\n",
+	printf "%7s  %5s %3s %6s %5s %5s (min cpu disk   ram name)\n",
 	    "PID", "Name", "RAM", "disk", "total", "EUR";
 	foreach my $name (keys %{$servers}) {
 		my $wp = $servers->{$name}->{winner}->{product};
