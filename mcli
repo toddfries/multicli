@@ -47,6 +47,7 @@ if (!defined($opt_p)) {
 }
 
 our $mcli = { };
+our $stats = { };
 
 our $r = ReadConf->new();
 
@@ -279,11 +280,20 @@ sub hetzner {
 		}
 	}
 
-	printf "%7s  %5s %3s %6s %5s %5s (min cpu disk   ram name)\n",
-	    "PID", "Name", "RAM", "disk", "total", "EUR";
 	foreach my $name (keys %{$servers}) {
 		my $wp = $servers->{$name}->{winner}->{product};
-		printf "%7s. %5s %3d %dx%4d=%5d %5.2f (%5d %5d %6d %s)\n", $wp->{id}, $wp->{name},
+		rank_length('EUR', sprintf("%0.2f", $wp->{price}));
+		rank_length('name', $wp->{name});
+		rank_length('myname', $name);
+	}
+	my $eulen = get_length('EUR');
+	my $namlen = get_length('name');
+	my $mynamlen = get_length('myname');
+	printf "%7s  %${namlen}s %3s %6s %5s %${eulen}s (min cpu disk   ram %${mynamlen}s)\n",
+	    "PID", "Name", "RAM", "disk", "total", "EUR", 'name';
+	foreach my $name (keys %{$servers}) {
+		my $wp = $servers->{$name}->{winner}->{product};
+		printf "%7s. %${namlen}s %3d %dx%4d=%5d %${eulen}.2f (%5d %5d %6d %${mynamlen}s)\n", $wp->{id}, $wp->{name},
 		    $wp->{memory_size}, $wp->{hdd_count}, $wp->{hdd_size},
 		    $wp->{hdd_count} * $wp->{hdd_size},
 		    $wp->{price},
@@ -532,7 +542,7 @@ sub bci {
 	my $bci = $mcli->{bci};
 	$bci->ua->agent("OpenBSD ftp");
 
-	if ($opt_a eq "rawtx" && defined($opt_t)) {
+	if (defined($opt_a) && $opt_a eq "rawtx" && defined($opt_t)) {
 		my $rawtx = $bci->rawtx($opt_t);
 		print Dumper($rawtx);
 		return;
@@ -1517,4 +1527,19 @@ sub weather_init_lines {
 	$lines->{humline} = sprintf("%14s","Humidity");
 	$lines->{qpfline} = sprintf("%14s","Rainfall(in)");
 	return $lines;
+}
+
+sub rank_length {
+	my ($fname, $val) = @_;
+	if (defined($stats->{lengths}->{$fname})) {
+		if ($stats->{lengths}->{$fname} < length($val)) {
+			$stats->{lengths}->{$fname} = length($val);
+		}
+	} else {
+		$stats->{lengths}->{$fname} = length($val);
+	}
+}
+sub get_length {
+	my ($val) = @_;
+	return $stats->{lengths}->{$val};
 }
