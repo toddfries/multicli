@@ -299,15 +299,18 @@ sub hetzner {
 		rank_length('EUR', sprintf("%0.2f", $wp->{price}));
 		rank_length('name', $wp->{name});
 		rank_length('myname', $name);
+		rank_length('cpu', $wp->{cpu_benchmark});
 	}
 	my $eulen = get_length('EUR');
 	$namlen = get_length('name');
 	my $mynamlen = get_length('myname');
-	printf "%7s  %${namlen}s %3s %6s %5s %${eulen}s (min cpu disk   ram %-${mynamlen}s)\n",
-	    "PID", "Name", "RAM", "disk", "total", "EUR", 'name';
+	my $cpulen = get_length('cpu');
+	printf "%7s  %${namlen}s %${cpulen}s %3s %6s %5s %${eulen}s (min cpu disk   ram %-${mynamlen}s)\n",
+	    "PID", "Name", "CPU", "RAM", "disk", "total", "EUR", 'name';
 	foreach my $name (keys %{$servers}) {
 		my $wp = $servers->{$name}->{winner}->{product};
-		printf "%7s. %${namlen}s %3d %dx%4d=%5d %${eulen}.2f (%5d %5d %6d %-${mynamlen}s)\n", $wp->{id}, $wp->{name},
+		printf "%7s. %${namlen}s %${cpulen}d %3d %dx%4d=%5d %${eulen}.2f (%5d %5d %6d %-${mynamlen}s)\n", $wp->{id}, $wp->{name},
+		    $wp->{cpu_benchmark},
 		    $wp->{memory_size}, $wp->{hdd_count}, $wp->{hdd_size},
 		    $wp->{hdd_count} * $wp->{hdd_size},
 		    $wp->{price},
