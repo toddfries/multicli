@@ -208,9 +208,29 @@ sub hetzner {
 	$servers->{mem64}->{mincpu} = 1;
 	$servers->{mem64}->{mindisk} = 0;
 
+	$servers->{mem96}->{minmem} = 95;
+	$servers->{mem96}->{mincpu} = 1;
+	$servers->{mem96}->{mindisk} = 0;
+
 	$servers->{mem128}->{minmem} = 127;
 	$servers->{mem128}->{mincpu} = 1;
 	$servers->{mem128}->{mindisk} = 0;
+
+	$servers->{mem160}->{minmem} = 159;
+	$servers->{mem160}->{mincpu} = 1;
+	$servers->{mem160}->{mindisk} = 0;
+
+	$servers->{mem192}->{minmem} = 191;
+	$servers->{mem192}->{mincpu} = 1;
+	$servers->{mem192}->{mindisk} = 0;
+
+	$servers->{mem224}->{minmem} = 223;
+	$servers->{mem224}->{mincpu} = 1;
+	$servers->{mem224}->{mindisk} = 0;
+
+	$servers->{mem256}->{minmem} = 255;
+	$servers->{mem256}->{mincpu} = 1;
+	$servers->{mem256}->{mindisk} = 0;
 
 	if (defined($opt_D)||defined($opt_C)||defined($opt_M)) {
 		$servers->{cli}->{minmem} = 1;
@@ -296,6 +316,9 @@ sub hetzner {
 
 	foreach my $name (keys %{$servers}) {
 		my $wp = $servers->{$name}->{winner}->{product};
+		if (!defined($servers->{$name}->{winner}->{product})) {
+			next;
+		}
 		rank_length('EUR', sprintf("%0.2f", $wp->{price}));
 		rank_length('name', $wp->{name});
 		rank_length('myname', $name);
@@ -307,8 +330,18 @@ sub hetzner {
 	my $cpulen = get_length('cpu');
 	printf "%7s  %${namlen}s %${cpulen}s %3s %6s %5s %${eulen}s (min cpu disk   ram %-${mynamlen}s)\n",
 	    "PID", "Name", "CPU", "RAM", "disk", "total", "EUR", 'name';
-	foreach my $name (keys %{$servers}) {
+	foreach my $name (sort {
+			my $x = $servers->{$a}->{winner}->{product};
+			my $y = $servers->{$b}->{winner}->{product};
+			if (!defined($x) || !defined($y)) {
+				return 0;
+			}
+			$x->{price} > $y->{price};
+		} keys %{$servers}) {
 		my $wp = $servers->{$name}->{winner}->{product};
+		if (!defined($wp)) {
+			next;
+		}
 		printf "%7s. %${namlen}s %${cpulen}d %3d %dx%4d=%5d %${eulen}.2f (%5d %5d %6d %-${mynamlen}s)\n", $wp->{id}, $wp->{name},
 		    $wp->{cpu_benchmark},
 		    $wp->{memory_size}, $wp->{hdd_count}, $wp->{hdd_size},
