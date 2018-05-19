@@ -204,9 +204,13 @@ sub hetzner {
 	$servers->{st}->{mincpu} = 1;
 	$servers->{st}->{mindisk} = 8191;
 
-	$servers->{bst}->{minmem} = 3;
+	$servers->{bst}->{minmem} = 1;
 	$servers->{bst}->{mincpu} = 1;
 	$servers->{bst}->{mindisk} = 16383;
+
+	$servers->{bbst}->{minmem} = 1;
+	$servers->{bbst}->{mincpu} = 1;
+	$servers->{bbst}->{mindisk} = 32767;
 
 	$servers->{mem64}->{minmem} = 63;
 	$servers->{mem64}->{mincpu} = 1;
@@ -327,12 +331,18 @@ sub hetzner {
 		rank_length('name', $wp->{name});
 		rank_length('myname', $name);
 		rank_length('cpu', $wp->{cpu_benchmark});
+		rank_length('hdcount', $wp->{hdd_count});
+		rank_length('hdsize', $wp->{hdd_size});
+		rank_length('hdtotal', $wp->{hdd_count} * $wp->{hdd_size});
 	}
 	my $eulen = get_length('EUR');
 	$namlen = get_length('name');
 	my $mynamlen = get_length('myname');
 	my $cpulen = get_length('cpu');
-	printf "%7s  %${namlen}s %${cpulen}s %3s %6s %5s %${eulen}s (min cpu disk   ram %-${mynamlen}s)\n",
+	my $hdclen = get_length('hdcount');
+	my $hdslen = get_length('hdsize');
+	my $hdtlen = get_length('hdtotal');
+	printf "%7s  %${namlen}s %${cpulen}s    %${hdclen}s %${hdslen}s %${hdtlen}s %${eulen}s (min cpu disk   ram %-${mynamlen}s)\n",
 	    "PID", "Name", "CPU", "RAM", "disk", "total", "EUR", 'name';
 	foreach my $name (sort {
 			my $x = $servers->{$a}->{winner}->{product};
@@ -352,7 +362,7 @@ sub hetzner {
 		if (!defined($wp)) {
 			next;
 		}
-		printf "%7s. %${namlen}s %${cpulen}d %3d %dx%4d=%5d %${eulen}.2f (%5d %5d %6d %-${mynamlen}s)\n", $wp->{id}, $wp->{name},
+		printf "%7s. %${namlen}s %${cpulen}d %3d %${hdclen}dx%${hdslen}d=%${hdtlen}d %${eulen}.2f (%5d %5d %6d %-${mynamlen}s)\n", $wp->{id}, $wp->{name},
 		    $wp->{cpu_benchmark},
 		    $wp->{memory_size}, $wp->{hdd_count}, $wp->{hdd_size},
 		    $wp->{hdd_count} * $wp->{hdd_size},
