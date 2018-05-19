@@ -200,8 +200,8 @@ sub hetzner {
 	$servers->{pxugd}->{mincpu} = 5681;
 	$servers->{pxugd}->{mindisk} = 4097;
 
-	$servers->{st}->{minmem} = 7;
-	$servers->{st}->{mincpu} = 999;
+	$servers->{st}->{minmem} = 1;
+	$servers->{st}->{mincpu} = 1;
 	$servers->{st}->{mindisk} = 8191;
 
 	$servers->{bst}->{minmem} = 3;
@@ -338,9 +338,15 @@ sub hetzner {
 			my $x = $servers->{$a}->{winner}->{product};
 			my $y = $servers->{$b}->{winner}->{product};
 			if (!defined($x) || !defined($y)) {
-				return 0;
+				return -1;
 			}
-			$x->{price} > $y->{price};
+			if ($x->{price} > $y->{price}) {
+				return 1;
+			} elsif ($x->{price} == $y->{price}) {
+				return 0;
+			} else {
+				return -1;
+			}
 		} keys %{$servers}) {
 		my $wp = $servers->{$name}->{winner}->{product};
 		if (!defined($wp)) {
