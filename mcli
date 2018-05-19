@@ -190,15 +190,15 @@ sub hetzner {
 	my $servers = { };
 	$servers->{px}->{minmem} = 47;
 	$servers->{px}->{mincpu} = 5681;
-	$servers->{px}->{mindisk} = 2048;
+	$servers->{px}->{mindisk} = 4096;
 
 	$servers->{pxugcpu}->{minmem} = 47;
 	$servers->{pxugcpu}->{mincpu} = 5683;
-	$servers->{pxugcpu}->{mindisk} = 2048;
+	$servers->{pxugcpu}->{mindisk} = 4096;
 
 	$servers->{pxugd}->{minmem} = 47;
 	$servers->{pxugd}->{mincpu} = 5681;
-	$servers->{pxugd}->{mindisk} = 2049;
+	$servers->{pxugd}->{mindisk} = 4097;
 
 	$servers->{st}->{minmem} = 7;
 	$servers->{st}->{mincpu} = 999;
