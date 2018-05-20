@@ -305,6 +305,7 @@ sub hetzner {
 			print Dumper($server);
 		}
 		my $sp = $server->{product};
+		cull_dc($sp);
 		my $disk =  $sp->{hdd_count} * $sp->{hdd_size};
 		if ($disk < $opt_D) {
 			next;
@@ -344,6 +345,9 @@ sub hetzner {
 				}
 			}
 		}
+	}
+	foreach my $dc (keys %{$stats->{dcs}}) {
+		print "DC .. ${dc}\n";
 	}
 
 	foreach my $name (keys %{$servers}) {
@@ -1636,4 +1640,16 @@ sub rank_length {
 sub get_length {
 	my ($val) = @_;
 	return $stats->{lengths}->{$val};
+}
+
+sub cull_dc {
+	my ($sp) = @_;
+
+	my $dc = $sp->{datacenter};
+
+	if (!defined($dc)) {
+		return;
+	}
+
+	$stats->{dcs}->{$dc} = 1;
 }
