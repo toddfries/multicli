@@ -187,99 +187,10 @@ sub hetzner {
 	if (!defined($opt_D)) {
 		$opt_D = 0;
 	}
-	my $servers = { };
-	$servers->{px}->{minmem} = 47;
-	$servers->{px}->{mincpu} = 5681;
-	$servers->{px}->{mindisk} = 4096;
-
-	$servers->{pxugcpu}->{minmem} = 47;
-	$servers->{pxugcpu}->{mincpu} = 5683;
-	$servers->{pxugcpu}->{mindisk} = 4096;
-
-	$servers->{pxugd}->{minmem} = 47;
-	$servers->{pxugd}->{mincpu} = 5681;
-	$servers->{pxugd}->{mindisk} = 4097;
-
-	$servers->{st8}->{minmem} = 1;
-	$servers->{st8}->{mincpu} = 1;
-	$servers->{st8}->{mindisk} = 8191;
-
-	$servers->{st12}->{minmem} = 1;
-	$servers->{st12}->{mincpu} = 1;
-	$servers->{st12}->{mindisk} = 12287;
-
-	$servers->{st16}->{minmem} = 1;
-	$servers->{st16}->{mincpu} = 1;
-	$servers->{st16}->{mindisk} = 16383;
-
-	$servers->{st24}->{minmem} = 1;
-	$servers->{st24}->{mincpu} = 1;
-	$servers->{st24}->{mindisk} = 24575;
-
-	$servers->{st32}->{minmem} = 1;
-	$servers->{st32}->{mincpu} = 1;
-	$servers->{st32}->{mindisk} = 32767;
-
-	$servers->{mem64}->{minmem} = 63;
-	$servers->{mem64}->{mincpu} = 1;
-	$servers->{mem64}->{mindisk} = 0;
-
-	$servers->{mem96}->{minmem} = 95;
-	$servers->{mem96}->{mincpu} = 1;
-	$servers->{mem96}->{mindisk} = 0;
-
-	$servers->{mem128}->{minmem} = 127;
-	$servers->{mem128}->{mincpu} = 1;
-	$servers->{mem128}->{mindisk} = 0;
-
-	$servers->{mem160}->{minmem} = 159;
-	$servers->{mem160}->{mincpu} = 1;
-	$servers->{mem160}->{mindisk} = 0;
-
-	$servers->{mem192}->{minmem} = 191;
-	$servers->{mem192}->{mincpu} = 1;
-	$servers->{mem192}->{mindisk} = 0;
-
-	$servers->{mem224}->{minmem} = 223;
-	$servers->{mem224}->{mincpu} = 1;
-	$servers->{mem224}->{mindisk} = 0;
-
-	$servers->{mem256}->{minmem} = 255;
-	$servers->{mem256}->{mincpu} = 1;
-	$servers->{mem256}->{mindisk} = 0;
-
-	$servers->{cpu6k}->{minmem} = 1;
-	$servers->{cpu6k}->{mincpu} = 6143;
-	$servers->{cpu6k}->{mindisk} = 0;
-
-	$servers->{cpu12k}->{minmem} = 1;
-	$servers->{cpu12k}->{mincpu} = 12287;
-	$servers->{cpu12k}->{mindisk} = 0;
-
-	$servers->{cpu16k}->{minmem} = 1;
-	$servers->{cpu16k}->{mincpu} = 16383;
-	$servers->{cpu16k}->{mindisk} = 0;
-
-	$servers->{cpu24k}->{minmem} = 1;
-	$servers->{cpu24k}->{mincpu} = 24575;
-	$servers->{cpu24k}->{mindisk} = 0;
-
-	if (defined($opt_D)||defined($opt_C)||defined($opt_M)) {
-		$servers->{cli}->{minmem} = 1;
-		$servers->{cli}->{mincpu} = 1;
-		$servers->{cli}->{mindisk} = 1;
-		if (defined($opt_D)) {
-			$servers->{cli}->{mindisk} = $opt_D;
-		}
-		if (defined($opt_M)) {
-			$servers->{cli}->{minmem} = $opt_M;
-		}
-		if (defined($opt_C)) {
-			$servers->{cli}->{mincpu} = $opt_C;
-		}
-	}
 
 	my $mins = { };
+
+	my $servers = Hetzner::Servers->new();
 
 	foreach my $name (keys %{$servers}) {
 		foreach my $mn (('minmem', 'mincpu', 'mindisk')) {
@@ -297,109 +208,15 @@ sub hetzner {
 	$call .= "&min_memory_size=".$mins->{minmem};
 	my $parsed = $hetzner->get($call);
 
-	my $scount=0;
+	hetzner_show_market_list($parsed, $servers);
 
-	# XXX make this a sort, and print up to X servers
-	foreach my $server ( @{$parsed} ) {
-		if ($scount++ < 1 && $opt_v > 0) {
-			print Dumper($server);
-		}
-		my $sp = $server->{product};
-		cull_dc($sp);
-		my $disk =  $sp->{hdd_count} * $sp->{hdd_size};
-		if ($disk < $opt_D) {
-			next;
-		}
-		foreach my $name (keys %{$servers}) {
-			my $s = $servers->{$name};
-			if ($s->{minmem} > $sp->{memory_size}) {
-				next;
-			}
-			if ($s->{mincpu} > $sp->{cpu_benchmark}) {
-				next;
-			}
-			if ($s->{mindisk} > ($sp->{hdd_count} * $sp->{hdd_size})) {
-				next;
-			}
-			if (!defined($s->{winner})) {
-				$s->{winner} = $server;
-				next;
-			}
-			my $wp = $s->{winner}->{product};
-			if ($sp->{price} < $wp->{price}) {
-				next;
-			}
-			if ($sp->{price} == $wp->{price}) {
-				if ($sp->{memory_size} > $wp->{memory_size}) {
-					$s->{winner} = $server;
-					next;
-				}
-				my $wd = $wp->{hdd_count} * $wp->{hdd_size};
-				if ($disk > $wd) {
-					$s->{winner} = $server;
-					next;
-				}
-				if ($sp->{cpu_benchmark} > $wp->{cpu_benchmark}) {
-					$s->{winner} = $server;
-					next;
-				}
-			}
-		}
-	}
 	foreach my $dc (keys %{$stats->{dcs}}) {
-		print "DC .. ${dc}\n";
+		print "\nDC .. ${dc}\n";
+		$servers = Hetzner::Servers->new();
+		hetzner_show_market_list($parsed, $servers, $dc);
 	}
 
-	foreach my $name (keys %{$servers}) {
-		my $wp = $servers->{$name}->{winner}->{product};
-		if (!defined($servers->{$name}->{winner}->{product})) {
-			next;
-		}
-		rank_length('EUR', sprintf("%0.2f", $wp->{price}));
-		rank_length('name', $wp->{name});
-		rank_length('myname', $name);
-		rank_length('cpu', $wp->{cpu_benchmark});
-		rank_length('hdcount', $wp->{hdd_count});
-		rank_length('hdsize', $wp->{hdd_size});
-		rank_length('hdtotal', $wp->{hdd_count} * $wp->{hdd_size});
-	}
-	my $eulen = get_length('EUR');
-	$namlen = get_length('name');
-	my $mynamlen = get_length('myname');
-	my $cpulen = get_length('cpu');
-	my $hdclen = get_length('hdcount');
-	my $hdslen = get_length('hdsize');
-	my $hdtlen = get_length('hdtotal');
-	printf "%7s  %${namlen}s %${cpulen}s    %${hdclen}s %${hdslen}s %${hdtlen}s %${eulen}s (min cpu disk   ram %-${mynamlen}s)\n",
-	    "PID", "Name", "CPU", "RAM", "disk", "total", "EUR", 'name';
-	foreach my $name (sort {
-			my $x = $servers->{$a}->{winner}->{product};
-			my $y = $servers->{$b}->{winner}->{product};
-			if (!defined($x) || !defined($y)) {
-				return -1;
-			}
-			if ($x->{price} > $y->{price}) {
-				return 1;
-			} elsif ($x->{price} == $y->{price}) {
-				return 0;
-			} else {
-				return -1;
-			}
-		} keys %{$servers}) {
-		my $wp = $servers->{$name}->{winner}->{product};
-		if (!defined($wp)) {
-			next;
-		}
-		printf "%7s. %${namlen}s %${cpulen}d %3d %${hdclen}dx%${hdslen}d=%${hdtlen}d %${eulen}.2f (%5d %5d %6d %-${mynamlen}s)\n", $wp->{id}, $wp->{name},
-		    $wp->{cpu_benchmark},
-		    $wp->{memory_size}, $wp->{hdd_count}, $wp->{hdd_size},
-		    $wp->{hdd_count} * $wp->{hdd_size},
-		    $wp->{price},
-		    $servers->{$name}->{mincpu},
-		    $servers->{$name}->{mindisk},
-		    $servers->{$name}->{minmem},
-		    $name;
-	}
+
 }
 
 sub hetzner_setup {
@@ -1653,3 +1470,228 @@ sub cull_dc {
 
 	$stats->{dcs}->{$dc} = 1;
 }
+
+sub hetzner_show_market_list {
+	my ($parsed, $servers, $dc) = @_;
+	my $scount=0;
+	# XXX make this a sort, and print up to X servers
+	foreach my $server ( @{$parsed} ) {
+		if ($scount++ < 1 && $opt_v > 0) {
+			print Dumper($server);
+		}
+		my $sp = $server->{product};
+		if (defined($dc)) {
+			if ($sp->{datacenter} ne $dc) {
+				next;
+			}
+		} else {
+			cull_dc($sp);
+		}
+		my $disk =  $sp->{hdd_count} * $sp->{hdd_size};
+		if ($disk < $opt_D) {
+			next;
+		}
+		foreach my $name (keys %{$servers}) {
+			my $s = $servers->{$name};
+			if ($s->{minmem} > $sp->{memory_size}) {
+				next;
+			}
+			if ($s->{mincpu} > $sp->{cpu_benchmark}) {
+				next;
+			}
+			if ($s->{mindisk} >
+			    ($sp->{hdd_count} * $sp->{hdd_size})) {
+				next;
+			}
+			if (!defined($s->{winner})) {
+				$s->{winner} = $server;
+				next;
+			}
+			my $wp = $s->{winner}->{product};
+			if ($sp->{price} < $wp->{price}) {
+				next;
+			}
+			if ($sp->{price} == $wp->{price}) {
+				if ($sp->{memory_size} > $wp->{memory_size}) {
+					$s->{winner} = $server;
+					next;
+				}
+				my $wd = $wp->{hdd_count} * $wp->{hdd_size};
+				if ($disk > $wd) {
+					$s->{winner} = $server;
+					next;
+				}
+				if ($sp->{cpu_benchmark} > $wp->{cpu_benchmark}) {
+					$s->{winner} = $server;
+					next;
+				}
+			}
+		}
+	}
+	foreach my $name (keys %{$servers}) {
+		my $wp = $servers->{$name}->{winner}->{product};
+		if (!defined($servers->{$name}->{winner}->{product})) {
+			next;
+		}
+		rank_length('EUR', sprintf("%0.2f", $wp->{price}));
+		rank_length('name', $wp->{name});
+		rank_length('myname', $name);
+		rank_length('cpu', $wp->{cpu_benchmark});
+		rank_length('hdcount', $wp->{hdd_count});
+		rank_length('hdsize', $wp->{hdd_size});
+		rank_length('hdtotal', $wp->{hdd_count} * $wp->{hdd_size});
+	}
+	my $eulen = get_length('EUR');
+	my $namlen = get_length('name');
+	my $mynamlen = get_length('myname');
+	my $cpulen = get_length('cpu');
+	my $hdclen = get_length('hdcount');
+	my $hdslen = get_length('hdsize');
+	my $hdtlen = get_length('hdtotal');
+	printf "%7s  %${namlen}s %${cpulen}s    %${hdclen}s %${hdslen}s %${hdtlen}s %${eulen}s (min cpu disk   ram %-${mynamlen}s)\n",
+	    "PID", "Name", "CPU", "RAM", "disk", "total", "EUR", 'name';
+	foreach my $name (sort {
+			my $x = $servers->{$a}->{winner}->{product};
+			my $y = $servers->{$b}->{winner}->{product};
+			if (!defined($x) || !defined($y)) {
+				return -1;
+			}
+			if ($x->{price} > $y->{price}) {
+				return 1;
+			} elsif ($x->{price} == $y->{price}) {
+				return 0;
+			} else {
+				return -1;
+			}
+		} keys %{$servers}) {
+		my $wp = $servers->{$name}->{winner}->{product};
+		if (!defined($wp)) {
+			next;
+		}
+		printf "%7s. %${namlen}s %${cpulen}d %3d %${hdclen}dx%${hdslen}d=%${hdtlen}d %${eulen}.2f (%5d %5d %6d %-${mynamlen}s)\n", $wp->{id}, $wp->{name},
+		    $wp->{cpu_benchmark},
+		    $wp->{memory_size}, $wp->{hdd_count}, $wp->{hdd_size},
+		    $wp->{hdd_count} * $wp->{hdd_size},
+		    $wp->{price},
+		    $servers->{$name}->{mincpu},
+		    $servers->{$name}->{mindisk},
+		    $servers->{$name}->{minmem},
+		    $name;
+	}
+}
+
+1;
+
+package Hetzner::Servers;
+
+use strict;
+use warnings;
+
+sub new {
+	my ($class, $parent) = @_;
+
+	my $me = { };
+
+	my $ret = bless $me, $class;
+
+	$me->init();
+
+	return $ret;
+
+}
+
+sub init {
+	my ($servers) = @_;
+
+	$servers->{px}->{minmem} = 47;
+	$servers->{px}->{mincpu} = 5681;
+	$servers->{px}->{mindisk} = 4096;
+
+	$servers->{pxugcpu}->{minmem} = 47;
+	$servers->{pxugcpu}->{mincpu} = 5683;
+	$servers->{pxugcpu}->{mindisk} = 4096;
+
+	$servers->{pxugd}->{minmem} = 47;
+	$servers->{pxugd}->{mincpu} = 5681;
+	$servers->{pxugd}->{mindisk} = 4097;
+
+	$servers->{st8}->{minmem} = 1;
+	$servers->{st8}->{mincpu} = 1;
+	$servers->{st8}->{mindisk} = 8191;
+
+	$servers->{st12}->{minmem} = 1;
+	$servers->{st12}->{mincpu} = 1;
+	$servers->{st12}->{mindisk} = 12287;
+
+	$servers->{st16}->{minmem} = 1;
+	$servers->{st16}->{mincpu} = 1;
+	$servers->{st16}->{mindisk} = 16383;
+
+	$servers->{st24}->{minmem} = 1;
+	$servers->{st24}->{mincpu} = 1;
+	$servers->{st24}->{mindisk} = 24575;
+
+	$servers->{st32}->{minmem} = 1;
+	$servers->{st32}->{mincpu} = 1;
+	$servers->{st32}->{mindisk} = 32767;
+
+	$servers->{mem64}->{minmem} = 63;
+	$servers->{mem64}->{mincpu} = 1;
+	$servers->{mem64}->{mindisk} = 0;
+
+	$servers->{mem96}->{minmem} = 95;
+	$servers->{mem96}->{mincpu} = 1;
+	$servers->{mem96}->{mindisk} = 0;
+
+	$servers->{mem128}->{minmem} = 127;
+	$servers->{mem128}->{mincpu} = 1;
+	$servers->{mem128}->{mindisk} = 0;
+
+	$servers->{mem160}->{minmem} = 159;
+	$servers->{mem160}->{mincpu} = 1;
+	$servers->{mem160}->{mindisk} = 0;
+
+	$servers->{mem192}->{minmem} = 191;
+	$servers->{mem192}->{mincpu} = 1;
+	$servers->{mem192}->{mindisk} = 0;
+
+	$servers->{mem224}->{minmem} = 223;
+	$servers->{mem224}->{mincpu} = 1;
+	$servers->{mem224}->{mindisk} = 0;
+
+	$servers->{mem256}->{minmem} = 255;
+	$servers->{mem256}->{mincpu} = 1;
+	$servers->{mem256}->{mindisk} = 0;
+
+	$servers->{cpu6k}->{minmem} = 1;
+	$servers->{cpu6k}->{mincpu} = 6143;
+	$servers->{cpu6k}->{mindisk} = 0;
+
+	$servers->{cpu12k}->{minmem} = 1;
+	$servers->{cpu12k}->{mincpu} = 12287;
+	$servers->{cpu12k}->{mindisk} = 0;
+
+	$servers->{cpu16k}->{minmem} = 1;
+	$servers->{cpu16k}->{mincpu} = 16383;
+	$servers->{cpu16k}->{mindisk} = 0;
+
+	$servers->{cpu24k}->{minmem} = 1;
+	$servers->{cpu24k}->{mincpu} = 24575;
+	$servers->{cpu24k}->{mindisk} = 0;
+
+	if (defined($opt_D)||defined($opt_C)||defined($opt_M)) {
+		$servers->{cli}->{minmem} = 1;
+		$servers->{cli}->{mincpu} = 1;
+		$servers->{cli}->{mindisk} = 1;
+		if (defined($opt_D)) {
+			$servers->{cli}->{mindisk} = $opt_D;
+		}
+		if (defined($opt_M)) {
+			$servers->{cli}->{minmem} = $opt_M;
+		}
+		if (defined($opt_C)) {
+			$servers->{cli}->{mincpu} = $opt_C;
+		}
+	}
+}
+
