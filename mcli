@@ -200,17 +200,25 @@ sub hetzner {
 	$servers->{pxugd}->{mincpu} = 5681;
 	$servers->{pxugd}->{mindisk} = 4097;
 
-	$servers->{st}->{minmem} = 1;
-	$servers->{st}->{mincpu} = 1;
-	$servers->{st}->{mindisk} = 8191;
+	$servers->{st8}->{minmem} = 1;
+	$servers->{st8}->{mincpu} = 1;
+	$servers->{st8}->{mindisk} = 8191;
 
-	$servers->{bst}->{minmem} = 1;
-	$servers->{bst}->{mincpu} = 1;
-	$servers->{bst}->{mindisk} = 16383;
+	$servers->{st12}->{minmem} = 1;
+	$servers->{st12}->{mincpu} = 1;
+	$servers->{st12}->{mindisk} = 12287;
 
-	$servers->{bbst}->{minmem} = 1;
-	$servers->{bbst}->{mincpu} = 1;
-	$servers->{bbst}->{mindisk} = 32767;
+	$servers->{st16}->{minmem} = 1;
+	$servers->{st16}->{mincpu} = 1;
+	$servers->{st16}->{mindisk} = 16383;
+
+	$servers->{st24}->{minmem} = 1;
+	$servers->{st24}->{mincpu} = 1;
+	$servers->{st24}->{mindisk} = 24575;
+
+	$servers->{st32}->{minmem} = 1;
+	$servers->{st32}->{mincpu} = 1;
+	$servers->{st32}->{mindisk} = 32767;
 
 	$servers->{mem64}->{minmem} = 63;
 	$servers->{mem64}->{mincpu} = 1;
@@ -239,6 +247,22 @@ sub hetzner {
 	$servers->{mem256}->{minmem} = 255;
 	$servers->{mem256}->{mincpu} = 1;
 	$servers->{mem256}->{mindisk} = 0;
+
+	$servers->{cpu6k}->{minmem} = 1;
+	$servers->{cpu6k}->{mincpu} = 6143;
+	$servers->{cpu6k}->{mindisk} = 0;
+
+	$servers->{cpu12k}->{minmem} = 1;
+	$servers->{cpu12k}->{mincpu} = 12287;
+	$servers->{cpu12k}->{mindisk} = 0;
+
+	$servers->{cpu16k}->{minmem} = 1;
+	$servers->{cpu16k}->{mincpu} = 16383;
+	$servers->{cpu16k}->{mindisk} = 0;
+
+	$servers->{cpu24k}->{minmem} = 1;
+	$servers->{cpu24k}->{mincpu} = 24575;
+	$servers->{cpu24k}->{mindisk} = 0;
 
 	if (defined($opt_D)||defined($opt_C)||defined($opt_M)) {
 		$servers->{cli}->{minmem} = 1;
