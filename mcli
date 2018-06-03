@@ -210,7 +210,7 @@ sub hetzner {
 
 	hetzner_show_market_list($parsed, $servers);
 
-	foreach my $dc (keys %{$stats->{dcs}}) {
+	foreach my $dc (sort keys %{$stats->{dcs}}) {
 		print "\nDC .. ${dc}\n";
 		$servers = Hetzner::Servers->new();
 		hetzner_show_market_list($parsed, $servers, $dc);
@@ -1603,17 +1603,33 @@ sub new {
 sub init {
 	my ($servers) = @_;
 
-	$servers->{px}->{minmem} = 47;
-	$servers->{px}->{mincpu} = 5681;
+	$servers->{px}->{minmem} = 48;
+	$servers->{px}->{mincpu} = 5165;
 	$servers->{px}->{mindisk} = 4096;
 
-	$servers->{pxugcpu}->{minmem} = 47;
-	$servers->{pxugcpu}->{mincpu} = 5683;
-	$servers->{pxugcpu}->{mindisk} = 4096;
+	$servers->{'pxCPU+'}->{minmem} = 48;
+	$servers->{'pxCPU+'}->{mincpu} = 5683;
+	$servers->{'pxCPU+'}->{mindisk} = 4096;
 
-	$servers->{pxugd}->{minmem} = 47;
-	$servers->{pxugd}->{mincpu} = 5681;
-	$servers->{pxugd}->{mindisk} = 4097;
+	$servers->{'pxCPU12k'}->{minmem} = 48;
+	$servers->{'pxCPU12k'}->{mincpu} = 12287;
+	$servers->{'pxCPU12k'}->{mindisk} = 4096;
+
+	$servers->{'pxD+'}->{minmem} = 48;
+	$servers->{'pxD+'}->{mincpu} = 5681;
+	$servers->{'pxD+'}->{mindisk} = 4097;
+
+	$servers->{'pxD6k'}->{minmem} = 48;
+	$servers->{'pxD6k'}->{mincpu} = 5681;
+	$servers->{'pxD6k'}->{mindisk} = 6143;
+
+	$servers->{'pxD8k'}->{minmem} = 48;
+	$servers->{'pxD8k'}->{mincpu} = 5681;
+	$servers->{'pxD8k'}->{mindisk} = 8191;
+
+	$servers->{'pxM+'}->{minmem} = 49;
+	$servers->{'pxM+'}->{mincpu} = 5681;
+	$servers->{'pxM+'}->{mindisk} = 4096;
 
 	$servers->{st8}->{minmem} = 1;
 	$servers->{st8}->{mincpu} = 1;
