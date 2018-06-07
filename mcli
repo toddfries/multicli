@@ -570,6 +570,7 @@ sub namecheap_setup {
 }
 
 sub weather_timefmt {
+	# XXX http://www.wpc.ncep.noaa.gov/html/heatindex_equation.shtml
 	my ($str) = @_;
 	if (!defined($str)) {
 		return "<str:undef>";
