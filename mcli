@@ -570,7 +570,6 @@ sub namecheap_setup {
 }
 
 sub weather_timefmt {
-	# XXX http://www.wpc.ncep.noaa.gov/html/heatindex_equation.shtml
 	my ($str) = @_;
 	if (!defined($str)) {
 		return "<str:undef>";
@@ -706,18 +705,15 @@ sub weather {
 	my $hcount = 0;
 	my $lastr;
 	foreach my $r (@hourly) {
+		my $t = $r->{temp}{english};
+		my $ws = $r->{wspd}{english};
+		my $rh = $r->{humidity};
 		$lines->{topline} .= sprintf(" %3d", $r->{FCTTIME}{hour_padded});
-		$lines->{infline} .= sprintf(" %3d", $r->{temp}{english});
-		my $wch = $r->{windchill}{english};
-		if ($wch == -9999) {
-			$wch = $r->{feelslike}{english};
-			if ($wch == -9999) {
-				$wch = $r->{heatindex}{english};
-			}
-		}
+		$lines->{infline} .= sprintf(" %3d", $t);
+		my $wch = calc_real_feel($r);
 		$lines->{feeline} .= sprintf(" %3d", $wch);
-		$lines->{spdline} .= sprintf(" %3d", $r->{wspd}{english});
-		$lines->{humline} .= sprintf(" %3d", $r->{humidity});
+		$lines->{spdline} .= sprintf(" %3d", $ws);
+		$lines->{humline} .= sprintf(" %3d", $rh);
 		$lines->{qpfline} .= sprintf(" %3.1f", $r->{qpf}{english});
 		if ($hcount++ > 11) {
 			$hcount = 0;
@@ -747,8 +743,14 @@ sub weather {
 		my $lowwind = ( $avgwind * 2 ) - $maxwind;
 		my $high = $day->{high}->{fahrenheit};
 		my $low = $day->{low}->{fahrenheit};
-		my $wchi = windchill_us( $high, $lowwind );
-		my $wclo = windchill_us( $low, $maxwind );
+		my $hum = $day->{avehumidity},
+		my $wchi;
+		my $wclo;
+
+		my $myr = faker( $high, $lowwind, $hum );
+		$wchi = calc_real_feel( $myr );
+		$myr = faker( $low, $maxwind, $hum );
+		$wclo = calc_real_feel( $myr );
 		printf "%3s %2s, %4s %4d/%4d %2d/%2d %4d/%4d %3d %4i %5.2f %-s\n",
 			$day->{date}->{monthname_short},
 			$day->{date}->{day},
@@ -767,6 +769,60 @@ sub weather {
 	#print Dumper($weather->data);
 }
 
+sub faker {
+	my ($t, $wspd, $hum) = @_;
+
+	my $myr = { };
+	$myr->{temp}{english} = $t;
+	$myr->{wspd}{english} = $wspd;
+	$myr->{humidity} = $hum;
+	$myr->{windchill}{english} = $t;
+	$myr->{feelslike}{english} = $t;
+	$myr->{heatindex}{english} = $t;
+
+	return $myr;
+}
+sub calc_real_feel {
+	my ($r) = @_;
+	my $t = $r->{temp}{english};
+	my $ws = $r->{wspd}{english};
+	my $rh = $r->{humidity};
+	my $wch = $t;
+	my $rwc = $r->{windchill}{english};
+	my $rfl = $r->{feelslike}{english};
+	my $rhi = $r->{heatindex}{english};
+
+	my ($mywc,$myhi,$myrf) = ($t, $t, $t);
+
+	if ($rfl == -9999) {
+		$rfl = $t;
+	}
+	if ($rwc == -9999) {
+		$rwc = $rfl;
+	}
+	if ($rhi == -9999) {
+		$rhi = $rfl;
+	}
+	if ($t <= 50) {
+		$mywc = windchill_us($t, $ws);
+		$myrf = $mywc;
+	} else {
+		$myhi = heatindex( $wch, $rh);
+		$myrf = $myhi;
+	}
+	if ($mywc != $rwc && $opt_v > 0) {
+		printf "calc_feels_like: mywc != rwc .. t/mywc/rwc=%s/%s/%s\n", $t,$mywc,$rwc;
+	}
+	if ($myhi != $rhi && $opt_v > 0) {
+		printf "calc_feels_like: myhi != rhi .. t/myhi/rhi=%s/%s/%s\n", $t,$myhi,$rhi;
+	}
+	if ($opt_v > 0) {
+		printf "calc_real_feel: results t/rwc/rfl/rhi/mywc/myhi/myrf = ".
+		    "%s/%s/%s/%s/%s/%s/%s\n", $t, $rwc, $rfl, $rhi, $mywc, $myhi, $myrf;
+	}
+	return $myrf;
+}
+
 sub windchill_us {
 	my ($temp, $ws) = @_;
 	if (!defined($temp) || !defined($ws)) {
@@ -782,6 +838,37 @@ sub windchill_us {
 	my $wc = 35.74 + (0.6215 * $temp) - (35.75 * $pow) + (0.4275 * $temp * $pow);
 	return $wc;
 }
+
+sub heatindex {
+	my ($t, $rh) = @_;
+	# taken from http://www.wpc.ncep.noaa.gov/html/heatindex_equation.shtml
+
+	if ($t <= 50) {
+		return $t;
+	}
+
+	my ($adjustment,$hi);
+	if ($rh < 13 && $t >= 80 && $t <= 112) {
+		$adjustment = ( (13-$rh)/4)*sqrt( (17-abs($t-95))/17 );
+		$adjustment *= -1;
+	}
+	if ($rh > 85 && $t >= 80 && $t <= 87) {
+		$adjustment = ( ($rh-85)/10 ) * ( (87-$t)/5 );
+	}
+	$hi = 0.5 * ($t + 61.0 + ( ($t-68.0)*1.2) + ($rh*0.094) );
+
+	if ( ($hi+$t)/2 < 80 ) {
+		return $hi;
+	}
+
+	$hi = -42.379 + 2.04901523*$t + 10.14333127*$rh - .22475541*$t*$rh -
+		.00683783*$t*$t - .05481717*$rh*$rh + .00122874*$t*$t*$rh +
+		.00085282*$t*$rh*$rh - .00000199*$t*$t*$rh*$rh;
+	if (defined($adjustment)) {
+		$hi += $adjustment;
+	}
+}
+
 
 sub weather_setup {
 	use WWW::Wunderground::API;
@@ -1439,7 +1526,7 @@ sub weather_init_lines {
 	$lines->{topline} = sprintf("%14s","Hour");
 	$lines->{infline} = sprintf("%14s","Temp(F)");
 	$lines->{spdline} = sprintf("%14s","WindSpeed");
-	$lines->{feeline} = sprintf("%14s","WindChill");
+	$lines->{feeline} = sprintf("%14s","RealFeel");
 	$lines->{humline} = sprintf("%14s","Humidity");
 	$lines->{qpfline} = sprintf("%14s","Rainfall(in)");
 	return $lines;
