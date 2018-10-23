@@ -532,6 +532,15 @@ sub namecheap {
 
 	my $dns = $namecheap->dns();
 	my $domlist = $dns->getdomains();
+	my $wg = $namecheap->wg();
+
+	my %whoisguard;
+	my $wglist = $wg->getList();
+	foreach my $w (@{$wglist->{Whoisguard}}) {
+		my %i = %{$w};
+		my $dom = $i{DomainName};
+		$whoisguard{$dom} = $w;
+	}
 
 	foreach my $dd (@{$domlist->{Domain}}) {
 		$dd->{ExpiresUD} = UnixDate(ParseDate($dd->{Expires}),"%s");
@@ -540,7 +549,25 @@ sub namecheap {
 	foreach my $dd (sort { $a->{ExpiresUD} <=> $b->{ExpiresUD} } @{$domlist->{Domain}}) {
 		my %d = %{$dd};
 		my $dom = $d{'Name'};
-		printf STDERR "%9d %10s %s\n", $d{'ID'}, $d{'Expires'}, $d{'Name'};
+		printf STDERR "%9d %10s %s", $d{'ID'}, $d{'Expires'}, $dom;
+		if (defined($whoisguard{$dom})) {
+			printf STDERR " whoisguard %s", $whoisguard{$dom}{Status};
+		}
+		my $hosts = $dns->gethosts(DomainName => $dom);
+		if (defined($hosts)) {
+			print STDERR Dumper($hosts);
+		}
+		my $nameservers = $dns->getnameservers(DomainName => $dom);
+		if (defined($nameservers)) {
+			printf STDERR "\n%10s nameservers = {","";
+			my $nstr="";
+			foreach my $ns (@{$nameservers->{Nameserver}}) {
+				$nstr .= $ns.", ";
+			}
+			$nstr =~ s/, $//;
+			print STDERR $nstr."}\n";
+			#print Dumper($nameservers);
+		}
 	}
 }
 
