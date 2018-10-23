@@ -531,7 +531,7 @@ sub namecheap {
 	status("Namecheap domain");
 
 	my $dns = $namecheap->dns();
-	my $domlist = $dns->getdomains();
+	my $domlist = $dns->getdomains(PageSize => 30);
 	my $wg = $namecheap->wg();
 
 	my %whoisguard;
@@ -557,6 +557,7 @@ sub namecheap {
 		if (defined($hosts)) {
 			print STDERR Dumper($hosts);
 		}
+		if ($opt_q > 0) {
 		my $nameservers = $dns->getnameservers(DomainName => $dom);
 		if (defined($nameservers)) {
 			printf STDERR "\n%10s nameservers = {","";
@@ -567,6 +568,9 @@ sub namecheap {
 			$nstr =~ s/, $//;
 			print STDERR $nstr."}\n";
 			#print Dumper($nameservers);
+		}
+		} else {
+			print "\n";
 		}
 	}
 }
