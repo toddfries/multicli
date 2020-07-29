@@ -109,12 +109,12 @@ if ($p eq "weather") {
 }
 }
 
-if (0) {
-use Finance::BlockIO;
-
-my $ret = Finance::BlockIO->get_current_price;
-print "BlockIO price ret: ",$ret,"\n";
-}
+#if (0) {
+#use Finance::BlockIO;
+#
+#my $ret = Finance::BlockIO->get_current_price;
+#print "BlockIO price ret: ",$ret,"\n";
+#}
 
 1;
 
@@ -531,28 +531,172 @@ sub namecheap {
 	status("Namecheap domain");
 
 	my $dns = $namecheap->dns();
+	#print STDERR "DNS:\n".Dumper($dns);
 	my $domlist = $dns->getdomains(PageSize => 30);
+	#print STDERR "DOMLIST:\n".Dumper($domlist);
 	my $wg = $namecheap->wg();
+	#print STDERR "WG:\n".Dumper($wg);
+	my $pricing = $namecheap->pricing();
+
+	# getpricing()
+	#print STDERR Dumper($pret);
+
+#   $VAR1 = {
+#          'ProductType' => {
+#                           'Name' => 'domains',
+#                           'ProductCategory' => {
+#                                                'Product' => {
+#                                                             'Name' => 'com',
+#                                                             'Price' => [
+#                                                                        {
+#                                                                          'AdditionalCost' => '0.18',
+#                                                                          'PromotionPrice' => '0.0',
+#                                                                          'YourAdditonalCost' => '0.18',
+#                                                                          'RegularPriceType' => 'MULTIPLE',
+#                                                                          'YourPrice' => '12.98',
+#                                                                          'RegularAdditionalCost' => '0.18',
+#                                                                          'RegularPrice' => '12.98',
+#                                                                          'DurationType' => 'YEAR',
+#                                                                          'YourPriceType' => 'MULTIPLE',
+#                                                                          'RegularAdditionalCostType' => 'MULTIPLE',
+#                                                                          'Currency' => 'USD',
+#                                                                          'Duration' => '1',
+#                                                                          'Price' => '12.98',
+#                                                                          'YourAdditonalCostType' => 'MULTIPLE',
+#                                                                          'PricingType' => 'MULTIPLE'
+#                                                                        },
+
+	my $prices = { };
 
 	my %whoisguard;
 	my $wglist = $wg->getList();
-	foreach my $w (@{$wglist->{Whoisguard}}) {
-		my %i = %{$w};
-		my $dom = $i{DomainName};
-		$whoisguard{$dom} = $w;
+	if (ref($wglist->{Whoisguard}) eq "HASH") {
+		# $VAR1 = {
+          	#	'Whoisguard' => {
+                #            'Expires' => '04/15/2020',
+                #            'ID' => '29431022',
+                #            'DomainName' => 'freedaemonconsulting.com',
+                #            'Status' => 'enabled',
+                #            'Created' => '04/22/2019'
+                #          }
+        	# };
+		my $wgldn = $wglist->{WhoisGuard}->{DomainName};
+		if (defined($wgldn)) {
+			$whoisguard{$wgldn} = $wglist->{WhoisGuard};
+		}
+	} elsif (ref($wglist->{Whoisguard}) eq "ARRAY reference") {
+		foreach my $w (@{$wglist->{Whoisguard}}) {
+			my %i = %{$w};
+			my $dom = $i{DomainName};
+			$whoisguard{$dom} = $w;
+		}
+	} else {
+		# if nobody has a whoisguard entry its empty???
+		#print "wg->getList() returned a ".ref($wglist->{Whoisguard})."\n";
+		#print Dumper($wglist);
+		#exit(1);
 	}
+		
 
 	foreach my $dd (@{$domlist->{Domain}}) {
+		my %d = %{$dd};
+		my $dom = $d{'Name'};
 		$dd->{ExpiresUD} = UnixDate(ParseDate($dd->{Expires}),"%s");
+		my $tld;
+		if ($dom =~ /^.*\.([^\.]+)$/) {
+			$tld = lc($1);
+		} else {
+			print STDERR "dom $dom has no tld???\n";
+			next;
+		}
+		if (defined($prices->{$tld})) {
+			if ($opt_v > 0) {
+			    print "prices->{$tld} = ".$prices->{$tld}."\n";
+			}
+			next;
+		}
+	   	my $pret = $pricing->getpricing(ProductType => 'DOMAIN', ActionName => 'RENEW',
+		    ProductName => uc($tld));
+		#print "getpricing(ProductType => 'DOMAIN', ActionName => 'RENEW', ProductName => ".uc($tld);
+		#print ") = ";
+		#print Dumper($pret);
+		#print "\n";
+	   	foreach my $price (@{ $pret->{ProductType}->{ProductCategory}->{Product}->{Price} }) {
+		    my $pname = $pret->{ProductType}->{ProductCategory}->{Product}->{Name};
+		    my $cost = $price->{YourPrice};
+		    my $curr = $price->{Currency};
+		    if ($opt_v > 0) {
+		    	printf "'%s' costs %s %s to renew @ %d %s\n", $pname, $cost, $curr,
+			    $price->{Duration}, $price->{DurationType};
+		    }
+		    if ($price->{DurationType} eq 'YEAR' &&
+			$price->{Duration} == 1) {
+				$prices->{$tld} = $cost;
+		    }
+	        }
 	}
 
+	printf STDERR "%9s %10s %10s %5s %2s %2s %2s %2s %2s %2s %8s %s\n", "ID", "Created", "Expires", "InDays",
+	    "AR", "EX", "LO", "OD", "PR", "WG",
+	    "Cost",
+	    "Domain name";
+
+	my $tcost = 0.0;
 	foreach my $dd (sort { $a->{ExpiresUD} <=> $b->{ExpiresUD} } @{$domlist->{Domain}}) {
 		my %d = %{$dd};
 		my $dom = $d{'Name'};
-		printf STDERR "%9d %10s %s", $d{'ID'}, $d{'Expires'}, $dom;
+		#my $flags="";
+		my ($ar,$ex,$lo,$prem,$our,$wg)=(1,1,1,1,1,1);
 		if (defined($whoisguard{$dom})) {
-			printf STDERR " whoisguard %s", $whoisguard{$dom}{Status};
+			if ($whoisguard{$dom}{Status} eq "disabled") {
+				$wg = 0;
+			}
+			#$flags=add_str_list($flags,"WG$wg");
+		} else {
+			$wg = 0;
 		}
+		if ($d{'AutoRenew'} eq 'false') {
+			$ar = 0;
+		}
+		if ($d{'IsExpired'} eq 'false') {
+			$ex = 0;
+		}
+		if ($d{'IsOurDNS'} eq 'false') {
+			$our = 0;
+		}
+		if ($d{'IsLocked'} eq 'false') {
+			$lo = 0;
+		}
+		if ($d{'IsPremium'} eq 'false') {
+			$prem = 0;
+		}
+
+		#$flags = add_str_list($flags, "AR$ar");
+		#$flags = add_str_list($flags, "EX$ex");
+		#$flags = add_str_list($flags, "LO$lo");
+		#$flags = add_str_list($flags, "OD$our");
+		#$flags = add_str_list($flags, "PR$prem");
+
+		my $tld = "...error...";
+		if ($d{Name} =~ /^.*\.([^\.]+)$/) {
+			$tld = $1;
+		}
+		my $cost = 0.0;
+		if (defined($prices->{$tld})) {
+			$cost = $prices->{$tld};
+		}
+		my $date1 = Date::Manip::Date->new('now');
+		my $date2 = Date::Manip::Date->new($d{Expires});
+		my $delta = $date1->calc($date2);
+		my $indays = $delta->printf("%.1dhm");
+
+		#printf STDERR " [%s]\n", $flags;
+		printf STDERR "%9d %10s %10s %5.1f %2d %2d %2d %2d %2d %2d \$%7.2f %s\n",
+		    $d{'ID'}, $d{'Created'}, $d{'Expires'}, $indays,
+		    $ar, $ex, $lo, $our, $prem, $wg,
+		    $cost,
+		    $dom;
+		$tcost += $cost;
 		my $hosts = $dns->gethosts(DomainName => $dom);
 		if (defined($hosts)) {
 			print STDERR Dumper($hosts);
@@ -560,7 +704,7 @@ sub namecheap {
 		if ($opt_q > 0) {
 		my $nameservers = $dns->getnameservers(DomainName => $dom);
 		if (defined($nameservers)) {
-			printf STDERR "\n%10s nameservers = {","";
+			printf STDERR "%10s nameservers = {","";
 			my $nstr="";
 			foreach my $ns (@{$nameservers->{Nameserver}}) {
 				$nstr .= $ns.", ";
@@ -569,10 +713,9 @@ sub namecheap {
 			print STDERR $nstr."}\n";
 			#print Dumper($nameservers);
 		}
-		} else {
-			print "\n";
 		}
 	}
+	printf STDERR "%56s\$%7.2f\n", " ", $tcost;
 }
 
 sub namecheap_setup {
@@ -902,7 +1045,7 @@ sub heatindex {
 
 
 sub weather_setup {
-	use WWW::Wunderground::API;
+	#use WWW::Wunderground::API;
 	use Cache::FileCache;
 
 	my $conf = $opt_c;
@@ -930,15 +1073,15 @@ sub weather_setup {
 		print "location is not defined, bailing\n";
 		return undef;
 	}
-	my $wu = WWW::Wunderground::API->new(
-		location => $location,
-		api_key => $apikey,
-		auto_api => 1,
-		cache => Cache::FileCache->new({
-			namespace => 'weathercache',
-			default_expires_in => 2400,
-		}),
-	);
+	my $wu; # = WWW::Wunderground::API->new(
+	#	location => $location,
+	#	api_key => $apikey,
+	#	auto_api => 1,
+	#	cache => Cache::FileCache->new({
+	#		namespace => 'weathercache',
+	#		default_expires_in => 2400,
+	#	}),
+	#);
 
 	return $wu;
 }
@@ -1500,8 +1643,8 @@ sub btcusd {
 	my $ask = $res->{ask};
 	my $bsavg = ($bid+$ask)/2;
 
-	use Finance::Bank::Kraken;
 	if (!defined($mcli->{kraken})) {
+		use Finance::Bank::Kraken;
 		$mcli->{kraken} = kraken_setup();
 	}
 	my $kraken = $mcli->{kraken};
@@ -1697,6 +1840,20 @@ sub hetzner_show_market_list {
 		    $servers->{$name}->{minmem},
 		    $name;
 	}
+}
+
+sub add_str_list {
+	my ($str,$item,$sep)=@_;
+	if (!defined($str)) {
+		return $item;
+	}
+	if (length($str) == 0) {
+		return $item;
+	}
+	if (!defined($sep)) {
+		$sep = ",";
+	}
+	return $str.$sep.$item;
 }
 
 1;
