@@ -28,8 +28,8 @@ use ReadConf;
 STDERR->autoflush(1);
 STDOUT->autoflush(1);
 
-our $opt_a;
-our $opt_p;
+our $opt_a; # 'additional args used per personality'
+our $opt_p; # 'personality'
 our $opt_q = 0;
 our $opt_t;    # bci/rawtx txid
 our $opt_v = 0;
@@ -532,14 +532,35 @@ sub namecheap {
 
 	my $dns = $namecheap->dns();
 	#print STDERR "DNS:\n".Dumper($dns);
+
+	if (defined($opt_a) && $opt_a =~ /^set ns=(.*)$/) {
+		my @nslist = split(/,/,$1);
+		foreach my $ns (@nslist) {
+			print "+ns  ${ns}\n";
+		}
+		foreach my $dom (@ARGV) {
+			print "+dom ${dom}\n";
+			my $result = $dns->setnameservers({
+				DomainName => $dom,
+				Nameservers => [ @nslist ],
+				DefaultNS => 0,
+			});
+			if (defined($result)) {
+				print "Result of setting ${dom} ns:\n";
+				print Dumper($result);
+			} else {
+				print "Failed to set ${dom} ns\n";
+			}
+		}
+	}
 	my $domlist = $dns->getdomains(PageSize => 30);
 	#print STDERR "DOMLIST:\n".Dumper($domlist);
 	my $wg = $namecheap->wg();
 	#print STDERR "WG:\n".Dumper($wg);
 	my $pricing = $namecheap->pricing();
+	#print STDERR "pricing:\n".Dumper($pricing);
+	my $NS = $namecheap->ns();
 
-	# getpricing()
-	#print STDERR Dumper($pret);
 
 #   $VAR1 = {
 #          'ProductType' => {
@@ -699,15 +720,35 @@ sub namecheap {
 		$tcost += $cost;
 		my $hosts = $dns->gethosts(DomainName => $dom);
 		if (defined($hosts)) {
-			print STDERR Dumper($hosts);
+			foreach my $h (@{$hosts->{Host}}) {
+				#print Dumper($h);
+				#last;
+				printf "\t%9d %10s %5d %s %s\n",
+					$h->{HostId},
+					$h->{Name},
+					$h->{TTL},
+					$h->{Type},
+					$h->{Address};
+			}
+			#print STDERR Dumper($hosts);
 		}
 		if ($opt_q > 0) {
 		my $nameservers = $dns->getnameservers(DomainName => $dom);
 		if (defined($nameservers)) {
 			printf STDERR "%10s nameservers = {","";
 			my $nstr="";
-			foreach my $ns (@{$nameservers->{Nameserver}}) {
-				$nstr .= $ns.", ";
+			foreach my $ns (sort @{$nameservers->{Nameserver}}) {
+				$nstr .= $ns;
+				#my $nsinfo = $NS->getInfo({
+				#	Nameserver => $ns,
+				#});
+				#if (defined($nsinfo)) {
+				#  print "ns.getInfo '${ns}':\n".Dumper($nsinfo);
+				#  $nstr .= " ".$nsinfo->{IP};
+				#  
+				#}
+				#exit(0);
+				$nstr .= ", ";
 			}
 			$nstr =~ s/, $//;
 			print STDERR $nstr."}\n";
