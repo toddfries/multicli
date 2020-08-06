@@ -15,7 +15,7 @@ Currently supporting:
 * bci .. last BTC block status
 * bw .. bw.com info, not functional yet
 * btcusd .. queries kraken+bitstamp+coinbase and valid results are pooled for a self made average BTC/USD 
-* weather .. uses an api key to query the wunderground.org api for current and historic conditions
+* weather .. used to work but wunderground.org got bought and pulled the api
 
 
 Example:
@@ -83,6 +83,11 @@ $ mcli -p weather -H 20010911
 20010911 21:53:00 73.00  30.11  9.2  53% 0 0 0 AO2 SLP196 T02280128 53005 $
 20010911 22:53:00 72.00  30.10 10.4  55% 0 0 0 AO2 SLP193 T02220128 $
 20010911 23:53:00 71.10  30.10 12.7  57% 0 0 0 AO2 SLP192 T02170128 $
+```
+
+```
+$ mcli -p namecheap -a "set ns=ns1.foo.org,ns2.foo.org" foo.org
+...
 ```
 
 If you find this is useful and wish to donate, I accept donations:
