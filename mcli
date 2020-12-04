@@ -40,7 +40,7 @@ our $opt_C; # hetzner min cpu
 our $opt_D; # hetzner min disk
 our $opt_M; # hetzner min mem
 
-getopt('a:c:p:q:t:vC:D:H:M:');
+getopts('a:c:p:q:t:vC:D:H:M:');
 
 if (!defined($opt_p)) {
 	$opt_p = "all";
