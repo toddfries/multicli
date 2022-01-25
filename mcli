@@ -147,6 +147,113 @@ sub hetzner {
 	my $prodlen = get_length('srv_prod');
 	my $namlen  = get_length('srv_name');
 	my $iplen  = get_length('srv_ip');
+
+	my $stash = { };
+
+	my $res = $mcli->{hetzner}->get("ip");
+	#print Dumper($res);
+# [
+#         {
+#           'ip' => {
+#                     'traffic_daily' => 2000,
+#                     'ip' => '176.9.38.115',
+#                     'traffic_monthly' => 20,
+#                     'separate_mac' => undef,
+#                     'traffic_hourly' => 200,
+#                     'traffic_warnings' => $VAR1->[0]{'ip'}{'locked'},
+#                     'locked' => $VAR1->[0]{'ip'}{'locked'},
+#                     'server_number' => 920671,
+#                     'server_ip' => '176.9.38.115'
+#                   }
+#         },
+# ]
+	my $treq="traffic?type=month&from=2020-11-01&to=2020-11-30";
+	my @ips;
+	foreach my $ip (@{$res}) {
+		my $thisip = $ip->{ip}->{ip};
+		my $srvip = $ip->{ip}->{server_ip};
+		$treq .= "&ip[]=$thisip";
+		push @{$stash->{ip}->{$srvip}}, $thisip;
+		push @ips, $ip->{ip};
+	}
+	$res = $mcli->{hetzner}->get("subnet");
+	#print Dumper($res);
+# [
+#         {
+#           'subnet' => {
+#                         'gateway' => 'fe80::1',
+#                         'failover' => $VAR1->[0]{'subnet'}{'failover'},
+#                         'ip' => '2a01:4f8:140:34e8::',
+#                         'server_number' => 558374,
+#                         'traffic_monthly' => 2,
+#                         'mask' => 64,
+#                         'vswitch_id' => undef,
+#                         'traffic_daily' => 500,
+#                         'locked' => $VAR1->[0]{'subnet'}{'failover'},
+#                         'server_ip' => '46.4.73.243',
+#                         'traffic_hourly' => 100,
+#                         'traffic_warnings' => $VAR1->[0]{'subnet'}{'failover'}
+#                       }
+#         },
+#         {
+#           'subnet' => {
+#                         'server_ip' => '46.4.89.19',
+#                         'locked' => $VAR1->[0]{'subnet'}{'failover'},
+#                         'traffic_warnings' => $VAR1->[0]{'subnet'}{'failover'},
+#                         'traffic_hourly' => 100,
+#                         'traffic_daily' => 500,
+#                         'vswitch_id' => undef,
+#                         'server_number' => 1147779,
+#                         'ip' => '2a01:4f8:140:7201::',
+#                         'mask' => 64,
+#                         'traffic_monthly' => 2,
+#                         'gateway' => 'fe80::1',
+#                         'failover' => $VAR1->[0]{'subnet'}{'failover'}
+#                       }
+#         },
+# ]
+	my @subs;
+	foreach my $subnet (@{$res}) {
+		my $thissub = $subnet->{subnet}->{ip};
+		my $srvip = $subnet->{subnet}->{server_ip};
+		my $cidr = $subnet->{subnet}->{ip}."/".$subnet->{subnet}->{mask};
+		$treq .= "&subnet[]=".$subnet->{subnet}->{ip};
+		push @{$stash->{subnet}->{$srvip}}, $thissub;
+		push @subs, $subnet->{subnet};
+	}
+
+	print $treq;
+	print "\n";
+	$res = $mcli->{hetzner}->get($treq);
+	#print Dumper($res);
+#$VAR1 = {
+#          'traffic' => {
+#                         'to' => '2020-11-30',
+#                         'type' => 'month',
+#                         'data' => {
+#                                     '78.46.227.212' => {
+#                                                          'sum' => '18.1807',
+#                                                          'in' => '11.1033',
+#                                                          'out' => '7.0774'
+#                                                        },
+#                                     '168.119.135.217' => {
+#                                                            'sum' => '0.1561',
+#                                                            'in' => '0.0903',
+#                                                            'out' => '0.0658'
+#                                                          },
+#                                     '78.46.227.214' => {
+#                                                          'in' => '2.8184',
+#                                                          'out' => '2.1347',
+#                                                          'sum' => '4.9531'
+#                                                        },
+#                                   },
+#                         'from' => '2020-11-01'
+#                       }
+#        };
+
+	
+	exit(0);
+	if (0) {
 	printf "%7s %${prodlen}s %${dclen}s %${namlen}s %10s %11s %${iplen}s %s\n",
 	    "Number","Prod","DC", "Name","Paid Till","Cancel Date","IP",
 	    "Traffic";
@@ -170,7 +277,9 @@ sub hetzner {
 			$s->get('server_ip'),
 			$ts;
 	}
+	}
 
+	if (0) {
 	status("Server Market");
 	my $call = "order/server_market/product";
 	$call .= "?search=Ent";
@@ -206,7 +315,7 @@ sub hetzner {
 
 	$call .= "&min_cpu_benchmark=".$mins->{mincpu};
 	$call .= "&min_memory_size=".$mins->{minmem};
-	my $parsed = $hetzner->get($call);
+	my $parsed = $mcli->{hetzner}->get($call);
 
 	hetzner_show_market_list($parsed, $servers);
 
@@ -214,6 +323,7 @@ sub hetzner {
 		print "\nDC .. ${dc}\n";
 		$servers = Hetzner::Servers->new();
 		hetzner_show_market_list($parsed, $servers, $dc);
+	}
 	}
 
 
