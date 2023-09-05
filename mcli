@@ -380,6 +380,7 @@ sub coinbase {
 }
 
 sub bleutrade_setup {
+	return;
 	use WebService::BleuTrade;
 	use LWP::UserAgent;
 
