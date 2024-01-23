@@ -768,7 +768,7 @@ sub namecheap {
 	        }
 	}
 
-	printf STDERR "%9s %10s %10s %5s %2s %2s %2s %2s %2s %2s %8s %s\n", "ID", "Created", "Expires", "InDays",
+	printf "%9s %10s %10s %5s %2s %2s %2s %2s %2s %2s %8s %s\n", "ID", "Created", "Expires", "InDays",
 	    "AR", "EX", "LO", "OD", "PR", "WG",
 	    "Cost",
 	    "Domain name";
@@ -823,7 +823,7 @@ sub namecheap {
 		my $indays = $delta->printf("%.1dhm");
 
 		#printf STDERR " [%s]\n", $flags;
-		printf STDERR "%9d %10s %10s %5.1f %2d %2d %2d %2d %2d %2d \$%7.2f %s\n",
+		printf "%9d %10s %10s %5.1f %2d %2d %2d %2d %2d %2d \$%7.2f %s\n",
 		    $d{'ID'}, $d{'Created'}, $d{'Expires'}, $indays,
 		    $ar, $ex, $lo, $our, $prem, $wg,
 		    $cost,
@@ -846,7 +846,7 @@ sub namecheap {
 		if ($opt_q > 0) {
 		my $nameservers = $dns->getnameservers(DomainName => $dom);
 		if (defined($nameservers)) {
-			printf STDERR "%10s nameservers = {","";
+			printf "%10s nameservers = {","";
 			my $nstr="";
 			foreach my $ns (sort @{$nameservers->{Nameserver}}) {
 				$nstr .= $ns;
@@ -862,12 +862,12 @@ sub namecheap {
 				$nstr .= ", ";
 			}
 			$nstr =~ s/, $//;
-			print STDERR $nstr."}\n";
+			print $nstr."}\n";
 			#print Dumper($nameservers);
 		}
 		}
 	}
-	printf STDERR "%56s\$%7.2f\n", " ", $tcost;
+	printf "%56s\$%7.2f\n", " ", $tcost;
 }
 
 sub namecheap_setup {
