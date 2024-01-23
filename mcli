@@ -381,7 +381,7 @@ sub coinbase {
 
 sub bleutrade_setup {
 	return;
-	use WebService::BleuTrade;
+	#use WebService::BleuTrade;
 	use LWP::UserAgent;
 
 	my $conf = $ENV{'HOME'}."/.bleutrade.conf";
