@@ -35,15 +35,28 @@ our $opt_t;    # bci/rawtx txid
 our $opt_v = 0;
 our $opt_c; # config file, if desired to over-ride
 our $opt_H; # weather historic date
+our $opt_o; # var1=val;var2=val1,val2,val3
 
 our $opt_C; # hetzner min cpu
 our $opt_D; # hetzner min disk
 our $opt_M; # hetzner min mem
 
-getopts('a:c:p:q:t:vC:D:H:M:');
+getopts('a:c:o:p:q:t:vC:D:H:M:');
 
 if (!defined($opt_p)) {
 	$opt_p = "all";
+}
+
+our $opt = { };
+if (defined($opt_o)) {
+	foreach my $o (split(/;/,$opt_o)) {
+		if ($o =~ /^(\s{0,}#|\s{0,}$)/) {
+			next;
+		}
+		if ($o =~ /^(.*)\s{0,}=\s{0,}(.*)$/) {
+			$opt->{$1} = $2;
+		}
+	}
 }
 
 our $mcli = { };
