@@ -137,6 +137,9 @@ sub hetzner {
 	status("Hetzner server");
 
 	my @hservers = $hetzner->servers;
+	if (! @hservers ) {
+		die "No servers retrieved";
+	}
 	foreach my $s (@hservers) {
 		rank_length('srv_dc',   $s->get('dc'));
 		rank_length('srv_prod', $s->get('product'));
