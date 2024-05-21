@@ -136,6 +136,9 @@ sub hetzner {
 		$mcli->{hetzner} = hetzner_setup();
 	}
 	my $hetzner = $mcli->{hetzner};
+	my $stash = { };
+	my $res;
+	my $treq=$dnow->printf("traffic?type=month&from=%Y-%m-01&to=%Y-%m-31");
 
 	status("Hetzner server");
 
@@ -143,17 +146,41 @@ sub hetzner {
 	if (! @hservers ) {
 		die "No servers retrieved";
 	}
-	my @vswitches = $hetzner->get("vswitch");
+	# a word about "reset" api. no arg = v4 only hosts, no v6 only
+	my @resets;
 	#print Dumper(@hservers);
 	# see json/hetzner.hservers
 	foreach my $s (@hservers) {
-		rank_length('srv_no',   $s->vget('server_number'));
+		my $sno = $s->vget('server_number');
+		rank_length('srv_no',   $sno);
 		rank_length('srv_dc',   $s->vget('dc'));
 		rank_length('srv_prod', $s->vget('product'));
 		rank_length('srv_name', $s->vget('server_name'));
 		rank_length('srv_ip4',  $s->vget('server_ip'));
 		rank_length('srv_ip6',  $s->vget('server_ipv6_net'));
+		
+		my $rret = $hetzner->get("reset/$sno");
+		#print "reset/$sno: ".Dumper($rret);
+		push @resets, $rret->{reset};
 	}
+	foreach my $r (@resets) {
+		#print "reset: ".Dumper($r);
+		# see json/hetzner.reset
+		my $sno = $r->{server_number};
+		if (!defined($sno)) {
+			next;
+		}
+		$stash->{s}->{$sno}->{rtype} = $r->{type};
+	}
+	my @stboxen = $hetzner->get("storagebox");
+	foreach my $sba (@stboxen) {
+		foreach my $sbb (@{ $sba }) {
+			my $sno = $sbb->{storagebox}->{linked_server};
+			$stash->{s}->{$sno}->{stbox} = $sbb->{storagebox};
+		}
+	}
+
+	my @vswitches = $hetzner->get("vswitch");
 
 	# yes double meaning of srv_no, but spacing for subnets past id's
 	# is possible this way
@@ -162,6 +189,9 @@ sub hetzner {
 		rank_length('srv_no',   $vs->{id});
 	    }
 	}
+	my @rdns = $hetzner->get("rdns");
+	my $subres = $hetzner->get("subnet");
+
 	$snolen  = get_length('srv_no');
 	$dclen   = get_length('srv_dc');
 	$prodlen = get_length('srv_prod');
@@ -169,9 +199,6 @@ sub hetzner {
 	$ip4len  = get_length('srv_ip4');
 	$ip6len  = get_length('srv_ip6');
 
-	my $stash = { };
-	my $res;
-	my $treq=$dnow->printf("traffic?type=month&from=%Y-%m-01&to=%Y-%m-31");
 	if (0) { # not yet
 	$res = $mcli->{hetzner}->get("ip");
 	#print Dumper($res);
@@ -186,11 +213,10 @@ sub hetzner {
 		push @ips, $ip->{ip};
 	}
 	}
-	$res = $mcli->{hetzner}->get("subnet");
 	#print Dumper($res);
 	# see json/hetzner.subnets
 	my $subs = { };
-	foreach my $subnet (@{$res}) {
+	foreach my $subnet (@{$subres}) {
 		#print Dumper($subnet);
 		# see json/hetzner.subnet
 		rank_length('net_len', $subnet->{subnet}->{ip});
@@ -261,8 +287,9 @@ sub hetzner {
 		} else {
 			($ti,$to,$ts) = (0.0,0.0,0.0);
 		}
+		my $sno = $s->vget('server_number');
 		printf "%${snolen}d %${prodlen}s %${dclen}s %${namlen}s %10s %${ip4len}s %${ip6len}s %f\n",
-			$s->vget('server_number'),
+			$sno,
 			$s->vget('product'),
 			$s->vget('dc'),
 			$s->vget('server_name'),
@@ -270,11 +297,17 @@ sub hetzner {
 			$s->vget('server_ip'),
 			$s->vget('server_ipv6_net'),
 			$ts;
-		my $nets = $stash->{s}->{
-				$s->vget('server_number')
-			}->{subnets};
+		my $stbox = $stash->{s}->{$sno}->{stbox};
+		if (defined($stbox)) {
+			fmt_stbox($stbox);
+		}
+		my $nets = $stash->{s}->{$sno}->{subnets};
 		if (defined($nets)) {
 			fmt_subnets($nets);
+		}
+		my $resets = $stash->{s}->{$sno}->{rtype};
+		if (defined($resets)) {
+			fmt_resets($resets);
 		}
 	}
 
@@ -297,7 +330,6 @@ sub hetzner {
 	}
 
 	status("Hetzner rdns");
-	my @rdns = $hetzner->get("rdns");
 	#print "rdns:\n",Dumper(@rdns);
 	# see json/hetzner.rdns
 	foreach my $r1 (@rdns) {
@@ -371,9 +403,32 @@ sub fmt_subnets {
 	my ($nets) = @_;
 
 	foreach my $net (@{$nets}) {
-		printf "%${snolen}s %${netlen}s/%2d %${gwlen}s\n", " ",
-			$net->{ip}, $net->{mask}, $net->{gateway};
+		printf "%${snolen}s subnet %${netlen}s/%2d gw %${gwlen}s\n",
+			" ", $net->{ip}, $net->{mask}, $net->{gateway};
 	}
+}
+
+sub fmt_resets {
+	my ($resets) = @_;
+
+	printf "%${snolen}s reset types: %s\n", " ", join(",", @{ $resets });
+}
+
+sub fmt_stbox {
+	my ($stbox) = @_;
+
+	#printf "%${snolen}s stbox %s\n", " ", Dumper($stbox);
+	my $prod = $stbox->{product};
+	$prod =~ s/\s.*$//;
+	my $dc = $stbox->{location};
+	my $name = $stbox->{name};
+	my $space = $stbox->{product};
+	if ($space =~ /^.*\(([0-9]+ [GT]B).*$/) {
+		$space = $1;
+	}
+	printf "%${snolen}s %${prodlen}s %${dclen}s %${namlen}s %10s %${snolen}s %4s %s\n",
+		" ", "stbox ".$prod, $dc, $name, $stbox->{paid_until},
+		$stbox->{id}, $space, $stbox->{login};
 }
 
 sub hetzner_setup {
