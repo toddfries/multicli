@@ -51,6 +51,7 @@ our $stats = { };
 
 our $r = ReadConf->new();
 
+our ($snolen, $dclen, $prodlen, $namlen, $ip6len, $ip4len, $netlen, $gwlen);
 our $dnow = Date::Manip::Date->new('now');
 
 foreach my $p (split(/,/,$opt_p)) {
@@ -142,20 +143,31 @@ sub hetzner {
 	if (! @hservers ) {
 		die "No servers retrieved";
 	}
+	my @vswitches = $hetzner->get("vswitch");
 	#print Dumper(@hservers);
 	# see json/hetzner.hservers
 	foreach my $s (@hservers) {
-		rank_length('srv_dc',   $s->get('dc'));
-		rank_length('srv_prod', $s->get('product'));
-		rank_length('srv_name', $s->get('server_name'));
-		rank_length('srv_ip4',  $s->get('server_ip'));
-		rank_length('srv_ip6',  $s->get('server_ipv6_net'));
+		rank_length('srv_no',   $s->vget('server_number'));
+		rank_length('srv_dc',   $s->vget('dc'));
+		rank_length('srv_prod', $s->vget('product'));
+		rank_length('srv_name', $s->vget('server_name'));
+		rank_length('srv_ip4',  $s->vget('server_ip'));
+		rank_length('srv_ip6',  $s->vget('server_ipv6_net'));
 	}
-	my $dclen   = get_length('srv_dc');
-	my $prodlen = get_length('srv_prod');
-	my $namlen  = get_length('srv_name');
-	my $ip4len  = get_length('srv_ip4');
-	my $ip6len  = get_length('srv_ip6');
+
+	# yes double meaning of srv_no, but spacing for subnets past id's
+	# is possible this way
+	foreach my $vsa (@vswitches) {
+	    foreach my $vs (sort { $a->{id} <=> $b->{id} } @{$vsa}) {
+		rank_length('srv_no',   $vs->{id});
+	    }
+	}
+	$snolen  = get_length('srv_no');
+	$dclen   = get_length('srv_dc');
+	$prodlen = get_length('srv_prod');
+	$namlen  = get_length('srv_name');
+	$ip4len  = get_length('srv_ip4');
+	$ip6len  = get_length('srv_ip6');
 
 	my $stash = { };
 	my $res;
@@ -181,11 +193,18 @@ sub hetzner {
 	foreach my $subnet (@{$res}) {
 		#print Dumper($subnet);
 		# see json/hetzner.subnet
+		rank_length('net_len', $subnet->{subnet}->{ip});
+		rank_length('gw_len', $subnet->{subnet}->{gateway});
 
 		my $thissub = $subnet->{subnet}->{ip};
 		my $sno = $subnet->{subnet}->{server_number};
 		if (defined($sno)) {
-			push @{ $stash->{srvt}->{$sno}->{subnets} },
+			push @{ $stash->{s}->{$sno}->{subnets} },
+				$subnet->{subnet};
+		}
+		my $vsno = $subnet->{subnet}->{vswitch_id};
+		if (defined($vsno)) {
+			push @{ $stash->{vs}->{$vsno}->{subnets} },
 				$subnet->{subnet};
 		}
 		#my $srvip = $subnet->{subnet}->{server_ip};
@@ -193,11 +212,13 @@ sub hetzner {
 		#$treq .= "&subnet[]=".$subnet->{subnet}->{ip};
 		$subs->{$thissub} = $subnet->{subnet};
 	}
+	$netlen = get_length('net_len');
+	$gwlen  = get_length('gw_len');
 
 	if (0) {
 	print $treq;
 	print "\n";
-	$res = $mcli->{hetzner}->get($treq);
+	$res = $mcli->{hetzner}->vget($treq);
 	#print Dumper($res);
 #$VAR1 = {
 #          'traffic' => {
@@ -226,7 +247,7 @@ sub hetzner {
 
 	}
 	
-	printf "%7s %${prodlen}s %${dclen}s %${namlen}s %10s %11s %${ip4len}s %${ip6len}s %s\n",
+	printf "%${snolen}s %${prodlen}s %${dclen}s %${namlen}s %10s %${ip4len}s %${ip6len}s %s\n",
 	    "Number","Prod","DC", "Name","Paid Till",
 	    "IPv4","IPv6",
 	    "Traffic";
@@ -240,15 +261,60 @@ sub hetzner {
 		} else {
 			($ti,$to,$ts) = (0.0,0.0,0.0);
 		}
-		printf "%7d %${prodlen}s %${dclen}s %${namlen}s %10s %${ip4len}s %${ip6len}s %f\n",
-			$s->get('server_number'),
-			$s->get('product'),
-			$s->get('dc'),
-			$s->get('server_name'),
-			$s->get('paid_until'),
-			$s->get('server_ip'),
-			$s->get('server_ipv6_net'),
+		printf "%${snolen}d %${prodlen}s %${dclen}s %${namlen}s %10s %${ip4len}s %${ip6len}s %f\n",
+			$s->vget('server_number'),
+			$s->vget('product'),
+			$s->vget('dc'),
+			$s->vget('server_name'),
+			$s->vget('paid_until'),
+			$s->vget('server_ip'),
+			$s->vget('server_ipv6_net'),
 			$ts;
+		my $nets = $stash->{s}->{
+				$s->vget('server_number')
+			}->{subnets};
+		if (defined($nets)) {
+			fmt_subnets($nets);
+		}
+	}
+
+	status("Hetzner vswitch");
+	#print "vswitches:\n",Dumper(@vswitches);
+	# see json/hetzner.vswitch
+	printf "%5s %4s %s\n",
+		"VID", "vlan", "Name";
+	foreach my $vsa (@vswitches) {
+	    foreach my $vs (sort { $a->{id} <=> $b->{id} } @{$vsa}) {
+		printf "%${snolen}s %4s %s\n",
+			$vs->{id},
+			$vs->{vlan},
+			$vs->{name};
+		my $nets = $stash->{vs}->{ $vs->{id} }->{subnets};
+		if (defined($nets)) {
+			fmt_subnets($nets);
+		}
+	    }
+	}
+
+	status("Hetzner rdns");
+	my @rdns = $hetzner->get("rdns");
+	#print "rdns:\n",Dumper(@rdns);
+	# see json/hetzner.rdns
+	foreach my $r1 (@rdns) {
+		foreach my $r (@{$r1}) {
+			my $d = $r->{rdns};
+			rank_length('rip',  $d->{ip});
+			rank_length('rptr', $d->{ptr});
+		}
+	}
+	my $riplen  = get_length('rip');
+	my $rptrlen = get_length('rptr');
+	foreach my $r1 (@rdns) {
+		foreach my $r (@{$r1}) {
+			printf "%${riplen}s %${rptrlen}s\n",
+				$r->{rdns}->{ip},
+				$r->{rdns}->{ptr};
+		}
 	}
 
 	if (0) {
@@ -299,6 +365,15 @@ sub hetzner {
 	}
 
 
+}
+
+sub fmt_subnets {
+	my ($nets) = @_;
+
+	foreach my $net (@{$nets}) {
+		printf "%${snolen}s %${netlen}s/%2d %${gwlen}s\n", " ",
+			$net->{ip}, $net->{mask}, $net->{gateway};
+	}
 }
 
 sub hetzner_setup {
