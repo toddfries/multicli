@@ -51,6 +51,8 @@ our $stats = { };
 
 our $r = ReadConf->new();
 
+our $dnow = Date::Manip::Date->new('now');
+
 foreach my $p (split(/,/,$opt_p)) {
 if ($p eq "all") {
 	hetzner();
@@ -140,37 +142,29 @@ sub hetzner {
 	if (! @hservers ) {
 		die "No servers retrieved";
 	}
+	#print Dumper(@hservers);
+	# see json/hetzner.hservers
 	foreach my $s (@hservers) {
 		rank_length('srv_dc',   $s->get('dc'));
 		rank_length('srv_prod', $s->get('product'));
 		rank_length('srv_name', $s->get('server_name'));
-		rank_length('srv_ip',   $s->get('server_ip'));
+		rank_length('srv_ip4',  $s->get('server_ip'));
+		rank_length('srv_ip6',  $s->get('server_ipv6_net'));
 	}
 	my $dclen   = get_length('srv_dc');
 	my $prodlen = get_length('srv_prod');
 	my $namlen  = get_length('srv_name');
-	my $iplen  = get_length('srv_ip');
+	my $ip4len  = get_length('srv_ip4');
+	my $ip6len  = get_length('srv_ip6');
 
 	my $stash = { };
-
-	my $res = $mcli->{hetzner}->get("ip");
+	my $res;
+	my $treq=$dnow->printf("traffic?type=month&from=%Y-%m-01&to=%Y-%m-31");
+	if (0) { # not yet
+	$res = $mcli->{hetzner}->get("ip");
 	#print Dumper($res);
-# [
-#         {
-#           'ip' => {
-#                     'traffic_daily' => 2000,
-#                     'ip' => '176.9.38.115',
-#                     'traffic_monthly' => 20,
-#                     'separate_mac' => undef,
-#                     'traffic_hourly' => 200,
-#                     'traffic_warnings' => $VAR1->[0]{'ip'}{'locked'},
-#                     'locked' => $VAR1->[0]{'ip'}{'locked'},
-#                     'server_number' => 920671,
-#                     'server_ip' => '176.9.38.115'
-#                   }
-#         },
-# ]
-	my $treq="traffic?type=month&from=2020-11-01&to=2020-11-30";
+	# see json/hetzner.ip
+
 	my @ips;
 	foreach my $ip (@{$res}) {
 		my $thisip = $ip->{ip}->{ip};
@@ -179,52 +173,28 @@ sub hetzner {
 		push @{$stash->{ip}->{$srvip}}, $thisip;
 		push @ips, $ip->{ip};
 	}
+	}
 	$res = $mcli->{hetzner}->get("subnet");
 	#print Dumper($res);
-# [
-#         {
-#           'subnet' => {
-#                         'gateway' => 'fe80::1',
-#                         'failover' => $VAR1->[0]{'subnet'}{'failover'},
-#                         'ip' => '2a01:4f8:140:34e8::',
-#                         'server_number' => 558374,
-#                         'traffic_monthly' => 2,
-#                         'mask' => 64,
-#                         'vswitch_id' => undef,
-#                         'traffic_daily' => 500,
-#                         'locked' => $VAR1->[0]{'subnet'}{'failover'},
-#                         'server_ip' => '46.4.73.243',
-#                         'traffic_hourly' => 100,
-#                         'traffic_warnings' => $VAR1->[0]{'subnet'}{'failover'}
-#                       }
-#         },
-#         {
-#           'subnet' => {
-#                         'server_ip' => '46.4.89.19',
-#                         'locked' => $VAR1->[0]{'subnet'}{'failover'},
-#                         'traffic_warnings' => $VAR1->[0]{'subnet'}{'failover'},
-#                         'traffic_hourly' => 100,
-#                         'traffic_daily' => 500,
-#                         'vswitch_id' => undef,
-#                         'server_number' => 1147779,
-#                         'ip' => '2a01:4f8:140:7201::',
-#                         'mask' => 64,
-#                         'traffic_monthly' => 2,
-#                         'gateway' => 'fe80::1',
-#                         'failover' => $VAR1->[0]{'subnet'}{'failover'}
-#                       }
-#         },
-# ]
-	my @subs;
+	# see json/hetzner.subnets
+	my $subs = { };
 	foreach my $subnet (@{$res}) {
+		#print Dumper($subnet);
+		# see json/hetzner.subnet
+
 		my $thissub = $subnet->{subnet}->{ip};
-		my $srvip = $subnet->{subnet}->{server_ip};
-		my $cidr = $subnet->{subnet}->{ip}."/".$subnet->{subnet}->{mask};
-		$treq .= "&subnet[]=".$subnet->{subnet}->{ip};
-		push @{$stash->{subnet}->{$srvip}}, $thissub;
-		push @subs, $subnet->{subnet};
+		my $sno = $subnet->{subnet}->{server_number};
+		if (defined($sno)) {
+			push @{ $stash->{srvt}->{$sno}->{subnets} },
+				$subnet->{subnet};
+		}
+		#my $srvip = $subnet->{subnet}->{server_ip};
+		#my $cidr = $subnet->{subnet}->{ip}."/".$subnet->{subnet}->{mask};
+		#$treq .= "&subnet[]=".$subnet->{subnet}->{ip};
+		$subs->{$thissub} = $subnet->{subnet};
 	}
 
+	if (0) {
 	print $treq;
 	print "\n";
 	$res = $mcli->{hetzner}->get($treq);
@@ -254,32 +224,31 @@ sub hetzner {
 #                       }
 #        };
 
+	}
 	
-	exit(0);
-	if (0) {
-	printf "%7s %${prodlen}s %${dclen}s %${namlen}s %10s %11s %${iplen}s %s\n",
-	    "Number","Prod","DC", "Name","Paid Till","Cancel Date","IP",
+	printf "%7s %${prodlen}s %${dclen}s %${namlen}s %10s %11s %${ip4len}s %${ip6len}s %s\n",
+	    "Number","Prod","DC", "Name","Paid Till",
+	    "IPv4","IPv6",
 	    "Traffic";
 	foreach my $s (@hservers) {
-		my ($ti,$to,$ts) = $s->traffic;
-		if (!defined($ts)) {
-			$ts = 0.0;
+		my ($ti,$to,$ts);
+		if (0) {
+			($ti,$to,$ts) = $s->traffic;
+			if (!defined($ts)) {
+				$ts = 0.0;
+			}
+		} else {
+			($ti,$to,$ts) = (0.0,0.0,0.0);
 		}
-		my $cancel = $s->cancel;
-		my $ed = "";
-		if (defined($cancel)) {
-			$ed = $cancel->get('earliest_cancellation_date');
-		}
-		printf "%7d %${prodlen}s %${dclen}s %${namlen}s %10s %11s %${iplen}s %f\n",
+		printf "%7d %${prodlen}s %${dclen}s %${namlen}s %10s %${ip4len}s %${ip6len}s %f\n",
 			$s->get('server_number'),
 			$s->get('product'),
 			$s->get('dc'),
 			$s->get('server_name'),
 			$s->get('paid_until'),
-			$ed,
 			$s->get('server_ip'),
+			$s->get('server_ipv6_net'),
 			$ts;
-	}
 	}
 
 	if (0) {
@@ -820,7 +789,7 @@ sub namecheap {
 		if (defined($prices->{$tld})) {
 			$cost = $prices->{$tld};
 		}
-		my $date1 = Date::Manip::Date->new('now');
+		my $date1 = $dnow;
 		my $date2 = Date::Manip::Date->new($d{Expires});
 		my $delta = $date1->calc($date2);
 		my $indays = $delta->printf("%.1dhm");
