@@ -149,8 +149,16 @@ sub hetzner {
 		$mcli->{hetzner} = hetzner_setup();
 	}
 	my $hetzner = $mcli->{hetzner};
-	my $stash = { };
+
+	if (defined($opt->{update})) {
+		hetzner_update($hetzner);
+	}
+	if (defined($opt->{query})) {
+		hetzner_query($hetzner);
+	}
+
 	my $res;
+	my $stash = { };
 	my $treq=$dnow->printf("traffic?type=month&from=%Y-%m-01&to=%Y-%m-31");
 
 	status("Hetzner server");
@@ -410,6 +418,29 @@ sub hetzner {
 	}
 
 
+}
+
+sub hetzner_query {
+	my ($hetzner) = @_;
+
+	my $q = $opt->{query};
+	my $res = $hetzner->get($q);
+	print "$q: ".Dumper($res);
+	exit(0);
+}
+
+sub hetzner_update {
+	my ($hetzner) = @_;
+
+	if ($opt->{update} eq "rdns") {
+			my $ip  = $opt->{ip};
+			my $ptr = $opt->{ptr};
+			my $data = { ptr => $ptr };
+			my $res = $hetzner->post("rdns/${ip}", $data);
+			print "res: ".Dumper($res);
+			exit(0);
+	}
+	exit(0);
 }
 
 sub fmt_subnets {
