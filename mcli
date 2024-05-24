@@ -440,6 +440,15 @@ sub hetzner_update {
 			print "res: ".Dumper($res);
 			exit(0);
 	}
+	if ($opt->{update} eq "reset") {
+			my $sno = $opt->{sno};
+			my $type = $opt->{rtype};
+			# validate rtype matches whats available for server
+			my $data = { type => $type };
+			my $res = $hetzner->post("reset/$sno", $data);
+			print "res: ".Dumper($res);
+			exit(0);
+	}
 	exit(0);
 }
 
