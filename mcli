@@ -208,6 +208,20 @@ sub hetzner {
 	foreach my $vsa (@vswitches) {
 	    foreach my $vs (sort { $a->{id} <=> $b->{id} } @{$vsa}) {
 		rank_length('srv_no',   $vs->{id});
+		my $vsid = $vs->{id};
+		my $ret = $hetzner->get("vswitch/".$vs->{id});
+		#print "get->(vswitch/:id): ".Dumper($ret);
+		# see json/hetzner.vswitch.:id
+		foreach my $srv (@{ $ret->{server} }) {
+			#print "vswitch->{server}: ".Dumper($srv);
+			# see json/hetzner.vswitch.:id.server
+			my $sno = $srv->{server_number};
+			if (!defined($sno)) {
+				next;
+			}
+			push @{ $stash->{s}->{$sno}->{vs} }, $vs;
+			push @{ $stash->{vs}->{$vsid}->{s} }, $sno;
+		}
 	    }
 	}
 	my @rdns = $hetzner->get("rdns");
@@ -329,6 +343,10 @@ sub hetzner {
 		my $resets = $stash->{s}->{$sno}->{rtype};
 		if (defined($resets)) {
 			fmt_resets($resets);
+		}
+		my $vss = $stash->{s}->{$sno}->{vs};
+		if (defined($vss)) {
+			fmt_vs($vss);
 		}
 	}
 
@@ -465,6 +483,18 @@ sub fmt_resets {
 	my ($resets) = @_;
 
 	printf "%${snolen}s reset types: %s\n", " ", join(",", @{ $resets });
+}
+
+sub fmt_vs {
+	my ($vss) = @_;
+
+	my $list = "";
+	foreach my $vs (sort { $a->{id} <=> $b->{id} } @{ $vss }) {
+		$list .= sprintf("%s[%s] ", $vs->{id}, $vs->{vlan});
+	}
+	if (length($list) > 0) {
+		printf "%${snolen}s vswitches $list\n"," ";
+	}
 }
 
 sub fmt_stbox {
