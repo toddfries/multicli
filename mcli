@@ -43,6 +43,8 @@ our $opt_M; # hetzner min mem
 
 getopts('a:c:o:p:q:t:vC:D:H:M:');
 
+our $v = $opt_v;
+
 if (!defined($opt_p)) {
 	$opt_p = "all";
 }
@@ -449,6 +451,9 @@ sub hetzner_query {
 
 sub hetzner_update {
 	my ($hetzner) = @_;
+	if ($v>0) {
+		printf "hetzner_update: ".$opt->{update}."\n";
+	}
 
 	if ($opt->{update} eq "rdns") {
 			my $ip  = $opt->{ip};
@@ -461,11 +466,49 @@ sub hetzner_update {
 	if ($opt->{update} eq "reset") {
 			my $sno = $opt->{sno};
 			my $type = $opt->{rtype};
+			if (!defined($type)) {
+				$type = "hw";
+			}
 			# validate rtype matches whats available for server
 			my $data = { type => $type };
 			my $res = $hetzner->post("reset/$sno", $data);
 			print "res: ".Dumper($res);
 			exit(0);
+	}
+	if ($opt->{update} eq "vswitch") {
+		if ($opt->{action} eq "add_vs_to_server") {
+			my $sno = $opt->{sno};
+			foreach my $vsid (split(/,/,$opt->{vsid})) {
+			    my $data = { 'server[]' => [ $sno ]  };
+			    print "vswitch add_vs_to_server $vsid res: ";
+			    my $res = $hetzner->post("vswitch/$vsid/server",
+				$data);
+			    print Dumper($res);
+			    exit(0);
+			}
+		}
+		exit(0);
+	}
+	if ($opt->{update} eq "rescue") {
+		my $action = $opt->{action};
+		my $sno = $opt->{sno};
+		if ($action eq "delete") {
+			my $res = $hetzner->delete("boot/$sno/rescue");
+			print Dumper($res);
+			exit(0);
+		}
+		my $os = "linux";
+		my $sshkey = $opt->{sshkey};
+		my $data = { os => $os };
+		if (defined($sshkey)) {
+			$data->{'authorized_key'} = $sshkey;
+		}
+		print "->post(boot/$sno/rescue, data) data=".Dumper($data);
+		my $res = $hetzner->post("boot/$sno/rescue", $data);
+		#print Dumper($res);
+		# see json/hetzner.rescue
+		$opt->{update} = "reset";
+		hetzner_update($hetzner);
 	}
 	exit(0);
 }
@@ -927,7 +970,7 @@ sub namecheap {
 			next;
 		}
 		if (defined($prices->{$tld})) {
-			if ($opt_v > 0) {
+			if ($v > 0) {
 			    print "prices->{$tld} = ".$prices->{$tld}."\n";
 			}
 			next;
@@ -942,7 +985,7 @@ sub namecheap {
 		    my $pname = $pret->{ProductType}->{ProductCategory}->{Product}->{Name};
 		    my $cost = $price->{YourPrice};
 		    my $curr = $price->{Currency};
-		    if ($opt_v > 0) {
+		    if ($v > 0) {
 		    	printf "'%s' costs %s %s to renew @ %d %s\n", $pname, $cost, $curr,
 			    $price->{Duration}, $price->{DurationType};
 		    }
@@ -1321,13 +1364,13 @@ sub calc_real_feel {
 		$myhi = heatindex( $wch, $rh);
 		$myrf = $myhi;
 	}
-	if ($mywc != $rwc && $opt_v > 0) {
+	if ($mywc != $rwc && $v > 0) {
 		printf "calc_feels_like: mywc != rwc .. t/mywc/rwc=%s/%s/%s\n", $t,$mywc,$rwc;
 	}
-	if ($myhi != $rhi && $opt_v > 0) {
+	if ($myhi != $rhi && $v > 0) {
 		printf "calc_feels_like: myhi != rhi .. t/myhi/rhi=%s/%s/%s\n", $t,$myhi,$rhi;
 	}
-	if ($opt_v > 0) {
+	if ($v > 0) {
 		printf "calc_real_feel: results t/rwc/rfl/rhi/mywc/myhi/myrf = ".
 		    "%s/%s/%s/%s/%s/%s/%s\n", $t, $rwc, $rfl, $rhi, $mywc, $myhi, $myrf;
 	}
@@ -1621,7 +1664,7 @@ sub parse_json {
 		die("%s: json->decode('%s') Error %s\n", $name, $str, $@);
 		return undef;
 	}
-	if ($opt_v > 0) {
+	if ($v > 0) {
 		printf "Pretty %s: %s\n", $name, $mcli->{JSON}->pretty->encode( $parsed )."\n";;
 	}
 	return $parsed;
@@ -2075,7 +2118,7 @@ sub hetzner_show_market_list {
 	my $scount=0;
 	# XXX make this a sort, and print up to X servers
 	foreach my $server ( @{$parsed} ) {
-		if ($scount++ < 1 && $opt_v > 0) {
+		if ($scount++ < 1 && $v > 0) {
 			print Dumper($server);
 		}
 		my $sp = $server->{product};
